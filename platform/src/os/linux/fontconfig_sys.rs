@@ -12,6 +12,7 @@ use std::os::raw::{c_char, c_int, c_uchar};
 
 pub type FcConfig = c_void;
 pub type FcPattern = c_void;
+pub type FcCharSet = c_void;
 
 // FcMatchKind
 const FC_MATCH_PATTERN: c_int = 0;
@@ -25,6 +26,7 @@ const FC_SLANT: &[u8] = b"slant\0";
 const FC_LANG: &[u8] = b"lang\0";
 const FC_FILE: &[u8] = b"file\0";
 const FC_SPACING: &[u8] = b"spacing\0";
+const FC_CHARSET: &[u8] = b"charset\0";
 
 // FC_SLANT values
 const FC_SLANT_ROMAN: c_int = 0;
@@ -53,6 +55,15 @@ struct LibFontconfig {
     fc_default_substitute: unsafe extern "C" fn(*mut FcPattern),
     fc_font_match:
         unsafe extern "C" fn(*mut FcConfig, *mut FcPattern, *mut c_int) -> *mut FcPattern,
+
+    // Charset functions, used for per-glyph fallback (when `query.sample` is
+    // set). Optional: if any is missing we just skip the charset hint and fall
+    // back to family/lang matching.
+    fc_charset_create: Option<unsafe extern "C" fn() -> *mut FcCharSet>,
+    fc_charset_add_char: Option<unsafe extern "C" fn(*mut FcCharSet, u32) -> c_int>,
+    fc_charset_destroy: Option<unsafe extern "C" fn(*mut FcCharSet)>,
+    fc_pattern_add_charset:
+        Option<unsafe extern "C" fn(*mut FcPattern, *const c_char, *const FcCharSet) -> c_int>,
 }
 
 impl LibFontconfig {
@@ -75,6 +86,10 @@ impl LibFontconfig {
             fc_config_substitute: lib.get_symbol("FcConfigSubstitute").ok()?,
             fc_default_substitute: lib.get_symbol("FcDefaultSubstitute").ok()?,
             fc_font_match: lib.get_symbol("FcFontMatch").ok()?,
+            fc_charset_create: lib.get_symbol("FcCharSetCreate").ok(),
+            fc_charset_add_char: lib.get_symbol("FcCharSetAddChar").ok(),
+            fc_charset_destroy: lib.get_symbol("FcCharSetDestroy").ok(),
+            fc_pattern_add_charset: lib.get_symbol("FcPatternAddCharSet").ok(),
             _lib: lib,
             config,
         })
@@ -128,6 +143,29 @@ unsafe fn load_system_font_inner(query: &SystemFontQuery) -> Option<Vec<u8>> {
                 FC_LANG.as_ptr() as *const c_char,
                 lang_c.as_ptr() as *const c_uchar,
             );
+        }
+    }
+
+    // Per-glyph fallback: if the caller passed the actual uncovered characters,
+    // require the matched font to cover them via a charset. fontconfig then
+    // picks whatever installed font covers the script, which is exactly the
+    // browser/Flutter behaviour. Built and destroyed within this scope; once
+    // added to the pattern fontconfig holds its own reference.
+    if !query.sample.is_empty() {
+        if let (Some(create), Some(add_char), Some(destroy), Some(add_charset)) = (
+            fc.fc_charset_create,
+            fc.fc_charset_add_char,
+            fc.fc_charset_destroy,
+            fc.fc_pattern_add_charset,
+        ) {
+            let charset = create();
+            if !charset.is_null() {
+                for ch in query.sample.chars() {
+                    add_char(charset, ch as u32);
+                }
+                add_charset(pat, FC_CHARSET.as_ptr() as *const c_char, charset);
+                destroy(charset);
+            }
         }
     }
 

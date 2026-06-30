@@ -70,6 +70,13 @@ pub struct SystemFontQuery {
     /// Optional BCP-47-ish language hint (e.g. "zh", "ja", "ko") used to bias CJK
     /// resolution. Empty means "no hint".
     pub lang: String,
+    /// Optional sample text the resolved font must be able to render. Used by
+    /// per-glyph system-font fallback: when a script isn't covered by any
+    /// declared family member, we ask the OS for a font that covers these exact
+    /// characters (macOS `CTFontCreateForString`, Linux `FcCharSet`, Windows
+    /// `IDWriteFont::HasCharacter` sweep, Android cmap matching). Empty preserves the old
+    /// role/lang-only behaviour. Also keys the negative cache per script.
+    pub sample: String,
 }
 
 impl Default for SystemFontQuery {
@@ -79,6 +86,7 @@ impl Default for SystemFontQuery {
             weight: 400,
             italic: false,
             lang: String::new(),
+            sample: String::new(),
         }
     }
 }
@@ -89,6 +97,7 @@ impl std::hash::Hash for SystemFontQuery {
         self.weight.hash(state);
         self.italic.hash(state);
         self.lang.hash(state);
+        self.sample.hash(state);
     }
 }
 impl Eq for SystemFontQuery {}

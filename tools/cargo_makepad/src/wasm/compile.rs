@@ -2172,7 +2172,7 @@ mod tests {
 
     #[test]
     fn font_resources_are_detected_by_extension() {
-        assert!(is_font_resource("IBMPlexSans-Text.ttf"));
+        assert!(is_font_resource("regular.ttf"));
         assert!(is_font_resource("NewCMMath-Regular.otf"));
         assert!(is_font_resource("some.TTC"));
         assert!(is_font_resource("web.woff"));

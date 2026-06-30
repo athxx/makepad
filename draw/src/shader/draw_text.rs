@@ -23,9 +23,11 @@ use {
     std::{
         cell::RefCell,
         collections::hash_map::DefaultHasher,
+        collections::HashSet,
         hash::{Hash, Hasher},
         rc::Rc,
     },
+    unicode_script::Script,
 };
 
 #[cfg(any(target_os = "linux", target_os = "windows"))]
@@ -2510,30 +2512,52 @@ impl DrawText {
     ) -> Rc<LaidoutText> {
         self.text_style.font_family.ensure_fonts_loaded(cx);
         let fonts = cx.get_global::<Rc<RefCell<Fonts>>>().clone();
-        let mut fonts = fonts.borrow_mut();
-
-        fonts.get_or_layout(BorrowedLayoutParams {
-            text,
-            style: Style {
-                font_family_id: self.text_style.font_family.to_font_family_id(),
-                font_size_in_pts: self.text_style.font_size,
-                color: None,
-            },
-            options: LayoutOptions {
-                first_row_indent_in_lpxs,
-                first_row_min_line_spacing_below_in_lpxs,
-                max_width_in_lpxs,
-                wrap,
-                align: align.x as f32,
-                line_spacing_scale: self.text_style.line_spacing,
-                max_rows: if self.max_lines > 0 {
-                    Some(self.max_lines)
-                } else {
-                    None
+        let laidout = {
+            let mut fonts = fonts.borrow_mut();
+            fonts.get_or_layout(BorrowedLayoutParams {
+                text,
+                style: Style {
+                    font_family_id: self.text_style.font_family.to_font_family_id(),
+                    font_size_in_pts: self.text_style.font_size,
+                    color: None,
                 },
-                ellipsis: self.text_overflow == TextOverflow::Ellipsis,
-            },
-        })
+                options: LayoutOptions {
+                    first_row_indent_in_lpxs,
+                    first_row_min_line_spacing_below_in_lpxs,
+                    max_width_in_lpxs,
+                    wrap,
+                    align: align.x as f32,
+                    line_spacing_scale: self.text_style.line_spacing,
+                    max_rows: if self.max_lines > 0 {
+                        Some(self.max_lines)
+                    } else {
+                        None
+                    },
+                    ellipsis: self.text_overflow == TextOverflow::Ellipsis,
+                },
+            })
+        };
+
+        // Per-glyph system-font fallback: if shaping hit characters no declared
+        // family member could cover, ask the OS for fonts covering those scripts
+        // and reshape next frame. The `fonts` borrow is released above so
+        // `ensure_fallback_for_scripts` can re-borrow it to define the new fonts.
+        // `attempted_scripts` bounds this to one OS query per script, so a redraw
+        // is requested only finitely often (and never on wasm, where resolution
+        // always fails). Fallbacks resolve at the default UI weight/style.
+        if !laidout.missing_scripts.is_empty() {
+            let changed = self.text_style.font_family.ensure_fallback_for_scripts(
+                cx,
+                &laidout.missing_scripts,
+                400,
+                false,
+            );
+            if changed {
+                cx.redraw_all();
+            }
+        }
+
+        laidout
     }
 
     fn draw_text(&mut self, cx: &mut Cx2d, origin_in_lpxs: Point<f32>, text: &LaidoutText) {
@@ -3211,12 +3235,43 @@ pub struct FontMember {
     pub weight: f32,
 }
 
-#[derive(Debug, Clone, Script, PartialEq)]
+#[derive(Debug, Clone, Script)]
 pub struct FontFamily {
     #[rust]
     id: LiveId,
     #[rust]
     members: Vec<FontMemberDef>,
+    /// Dynamically resolved per-glyph fallback fonts, appended after the static
+    /// `members` in the family definition. Populated by
+    /// `ensure_fallback_for_scripts` when the shaper reports characters no
+    /// static member covers (see per-glyph system-font fallback). Empty in the
+    /// common case (Latin/CJK/emoji covered by declared members).
+    ///
+    /// Boxed to keep `FontFamily` (and thus `DrawText`) small: this cache is
+    /// empty for nearly every text instance, so we pay one pointer inline rather
+    /// than an inline `Vec` + `RefCell` flag. (The pair of boxed caches also adds
+    /// exactly 16 bytes, preserving `DrawText`'s 16-byte size alignment — see
+    /// `draw_text_size_stays_16_byte_aligned`.)
+    #[rust]
+    fallback_font_ids: Box<RefCell<Vec<FontId>>>,
+    /// Scripts (keyed with weight + italic) we've already attempted to resolve a
+    /// fallback font for — successfully or not. Guards against re-querying the
+    /// OS every frame and bounds the report→resolve→reshape loop: each script is
+    /// attempted at most once per (weight, italic). Boxed for the same reason as
+    /// `fallback_font_ids`.
+    #[rust]
+    attempted_scripts: Box<RefCell<HashSet<(Script, u32, bool)>>>,
+}
+
+impl PartialEq for FontFamily {
+    fn eq(&self, other: &Self) -> bool {
+        // Identity is the declared family (id + static members). The runtime
+        // fallback state (`fallback_font_ids` / `attempted_scripts`) is derived
+        // cache, not part of the family's identity, so it's excluded — two
+        // applies of the same declared family must compare equal regardless of
+        // whatever fallbacks each happened to resolve.
+        self.id == other.id && self.members == other.members
+    }
 }
 
 #[derive(Debug, Clone, Default, PartialEq)]
@@ -3261,11 +3316,23 @@ impl FontFamily {
             }
         }
 
+        // Append dynamically resolved per-glyph fallback fonts after the static
+        // members. Their bytes were already registered with `define_font` in
+        // `ensure_fallback_for_scripts`, so we only push their ids here. Order
+        // matters: static latin/cjk/emoji members are tried first by the shaper,
+        // and dynamic fallbacks only catch characters they leave uncovered.
+        let fallback_font_ids = self.fallback_font_ids.borrow();
+        for &font_id in fallback_font_ids.iter() {
+            if fonts.is_font_known(font_id) {
+                font_ids.push(font_id);
+            }
+        }
+
         fonts.set_font_family_definition(
             self.to_font_family_id(),
             FontFamilyDefinition {
+                expected_member_count: self.members.len() + fallback_font_ids.len(),
                 font_ids,
-                expected_member_count: self.members.len(),
             },
         );
     }
@@ -3296,6 +3363,76 @@ impl FontFamily {
         let mut fonts_ref = fonts.borrow_mut();
         self.update_font_definitions(cx, &mut fonts_ref);
     }
+
+    /// Try to dynamically resolve and append a system font covering each of
+    /// `scripts` that no declared member could render. Returns `true` if the
+    /// family definition actually changed (at least one new fallback font was
+    /// registered), so the caller can request a redraw to reshape next frame.
+    ///
+    /// Convergence (Step D): every script is recorded in `attempted_scripts`
+    /// keyed by `(script, weight, italic)` whether or not a font was found, so
+    /// the OS is queried at most once per script per weight/italic and the
+    /// report→resolve→reshape loop is bounded. On platforms without a
+    /// system-font API (wasm), `resolve_system_font` returns `None`, the script
+    /// is still marked attempted, and no new member or redraw is produced.
+    fn ensure_fallback_for_scripts(
+        &self,
+        cx: &mut Cx,
+        scripts: &[Script],
+        weight: u32,
+        italic: bool,
+    ) -> bool {
+        let mut changed = false;
+        for &script in scripts {
+            let key = (script, weight, italic);
+            if self.attempted_scripts.borrow().contains(&key) {
+                continue;
+            }
+            // Mark attempted up front so a resolution failure (or a font that
+            // still doesn't cover the script) never re-queries the OS.
+            self.attempted_scripts.borrow_mut().insert(key);
+
+            let Some(sample) = script_sample_char(script) else {
+                continue;
+            };
+            let query = SystemFontQuery {
+                role: SystemFontRole::Ui,
+                weight,
+                italic,
+                lang: String::new(),
+                sample: sample.to_string(),
+            };
+            let Some(bytes) = cx.resolve_system_font(&query) else {
+                continue;
+            };
+
+            let font_id = fallback_font_id(script, weight, italic);
+            let fonts = cx.get_global::<Rc<RefCell<Fonts>>>().clone();
+            let mut fonts = fonts.borrow_mut();
+            if !fonts.is_font_known(font_id) {
+                fonts.define_font(
+                    font_id,
+                    FontDefinition {
+                        data: makepad_platform::SharedBytes::from_owned(bytes),
+                        index: 0,
+                        ascender_fudge_in_ems: 0.0,
+                        descender_fudge_in_ems: 0.0,
+                        weight: None,
+                        variations: Vec::new(),
+                    },
+                );
+            }
+            if !self.fallback_font_ids.borrow().contains(&font_id) {
+                self.fallback_font_ids.borrow_mut().push(font_id);
+            }
+            // Rebuild the family definition so the new fallback is included on
+            // the next shape. This evicts the family + layout caches; the shaper
+            // cache auto-invalidates because `fonts` is part of its key.
+            self.update_font_definitions(cx, &mut fonts);
+            changed = true;
+        }
+        changed
+    }
 }
 
 fn font_member_weight(member: &FontMemberDef) -> Option<f32> {
@@ -3313,6 +3450,62 @@ fn font_member_font_id(member: &FontMemberDef) -> FontId {
     member.desc.to_bits().hash(&mut hasher);
     member.weight.to_bits().hash(&mut hasher);
     FontId::from(hasher.finish())
+}
+
+/// A deterministic synthetic `FontId` for a dynamically resolved fallback font,
+/// keyed by the script it covers plus the weight/italic it was resolved for.
+/// Determinism matters: the same script resolved twice must map to the same id
+/// so `is_font_known` dedups instead of re-defining (which would trip the
+/// `!is_font_known` debug assert in `define_font`).
+fn fallback_font_id(script: Script, weight: u32, italic: bool) -> FontId {
+    let mut hasher = DefaultHasher::new();
+    // Tag the namespace so a fallback id can never collide with a static
+    // member id derived from a script-resource handle index.
+    "system-font-fallback".hash(&mut hasher);
+    // `Script` is a fieldless enum without a stable integer repr exposed, but it
+    // is `Hash`, so hash it directly.
+    script.hash(&mut hasher);
+    weight.hash(&mut hasher);
+    italic.hash(&mut hasher);
+    FontId::from(hasher.finish())
+}
+
+/// A representative character for a Unicode script, used as the `sample` in a
+/// `SystemFontQuery` so the OS resolves a font that actually covers the script.
+/// The mapping only needs *a* covered code point per script — the OS does the
+/// real coverage matching. Returns `None` for scripts we don't have a sample
+/// for (they're marked attempted and skipped). Covers the common
+/// not-in-default-font scripts; extend as needed.
+fn script_sample_char(script: Script) -> Option<char> {
+    Some(match script {
+        Script::Thai => 'ก',
+        Script::Devanagari => 'अ',
+        Script::Arabic => 'ا',
+        Script::Hebrew => 'א',
+        Script::Hangul => '가',
+        Script::Hiragana => 'あ',
+        Script::Katakana => 'ア',
+        Script::Han => '中',
+        Script::Bengali => 'অ',
+        Script::Tamil => 'அ',
+        Script::Telugu => 'అ',
+        Script::Kannada => 'ಅ',
+        Script::Malayalam => 'അ',
+        Script::Gujarati => 'અ',
+        Script::Gurmukhi => 'ਅ',
+        Script::Oriya => 'ଅ',
+        Script::Sinhala => 'අ',
+        Script::Myanmar => 'က',
+        Script::Khmer => 'ក',
+        Script::Lao => 'ກ',
+        Script::Tibetan => 'ཀ',
+        Script::Georgian => 'ა',
+        Script::Armenian => 'ա',
+        Script::Ethiopic => 'ሀ',
+        Script::Cherokee => 'Ꭰ',
+        Script::Mongolian => 'ᠠ',
+        _ => return None,
+    })
 }
 
 fn row_span_x_bounds_in_lpxs(

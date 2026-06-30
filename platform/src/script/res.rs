@@ -941,6 +941,7 @@ pub fn script_mod(vm: &mut ScriptVm) {
                 weight,
                 italic,
                 lang: String::new(),
+                sample: String::new(),
             };
 
             let abs_path = format!(

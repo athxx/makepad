@@ -1594,6 +1594,13 @@ impl Cx {
 mod tests {
     use super::*;
 
+    // NOTE: these tests assert only that *some* font bytes come back. They do
+    // NOT prove the bytes are usable, because `ttf_parser` (our outline
+    // extractor) lives in the draw crate, not here. In particular the broken
+    // Apple system fonts (SFNS.ttf / PingFangUI.ttc) DO load as bytes — the
+    // failure is purely that their outlines can't be extracted. The substitution
+    // that fixes that (see `apple_system_fonts::is_unparseable_system_font`) is
+    // verified end-to-end by rendering, and offline against `ttf_parser`.
     #[test]
     fn system_font_resolves_each_role() {
         use crate::cx_api::{SystemFontQuery, SystemFontRole};
@@ -1609,12 +1616,37 @@ mod tests {
                 weight: 400,
                 italic: false,
                 lang: String::new(),
+                sample: String::new(),
             };
             let bytes = load_system_font(&q).unwrap_or_default();
             assert!(
                 bytes.len() > 1000,
                 "role {:?} resolved {} bytes",
                 role,
+                bytes.len()
+            );
+        }
+    }
+
+    #[test]
+    fn system_font_resolves_for_sample_scripts() {
+        use crate::cx_api::{SystemFontQuery, SystemFontRole};
+        use crate::os::apple::apple_system_fonts::load_system_font;
+        // Per-glyph fallback: a representative character from a script not in
+        // the default UI font must still resolve to *some* covering font.
+        for sample in ["ก", "अ", "ا", "가", "ሀ"] {
+            let q = SystemFontQuery {
+                role: SystemFontRole::Ui,
+                weight: 400,
+                italic: false,
+                lang: String::new(),
+                sample: sample.to_string(),
+            };
+            let bytes = load_system_font(&q).unwrap_or_default();
+            assert!(
+                bytes.len() > 1000,
+                "sample {:?} resolved {} bytes",
+                sample,
                 bytes.len()
             );
         }

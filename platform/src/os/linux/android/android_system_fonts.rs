@@ -23,6 +23,35 @@ pub fn load_system_font(query: &SystemFontQuery) -> Option<Vec<u8>> {
     let bold = query.weight >= 600;
     let want_weight = if bold { 700 } else { 400 };
 
+    // Per-glyph fallback: if the caller passed the actual uncovered characters,
+    // pick the first font file (across every family in fonts.xml) whose cmap
+    // covers them all. Android tags families with `lang`, but a charset check
+    // is authoritative and matches what the browser/Flutter do. We parse each
+    // candidate file's cmap directly (no extra dependency); the caller caches
+    // the result and guards with `attempted_scripts`, so each script triggers
+    // at most one sweep.
+    if !query.sample.is_empty() {
+        let wanted: Vec<u32> = query.sample.chars().map(|c| c as u32).collect();
+        // Prefer entries closest to the requested weight/style, but any covering
+        // file is acceptable — iterate all families, best style/weight first.
+        let mut entries: Vec<&FontEntry> =
+            families.iter().flat_map(|f| f.fonts.iter()).collect();
+        entries.sort_by_key(|e| {
+            let style_penalty = if e.italic == query.italic { 0 } else { 10_000 };
+            let weight_penalty = (e.weight as i64 - want_weight as i64).unsigned_abs() as u64;
+            style_penalty as u64 + weight_penalty
+        });
+        for entry in entries {
+            let Some(bytes) = read_font_file(&entry.file) else {
+                continue;
+            };
+            if font_covers_all(&bytes, &wanted) {
+                return Some(bytes);
+            }
+        }
+        return None;
+    }
+
     // Pick candidate families in priority order for the requested role.
     let candidates = role_family_candidates(query.role, &query.lang);
 
@@ -58,6 +87,175 @@ fn read_font_file(file: &str) -> Option<Vec<u8>> {
         format!("{}/{}", FONTS_DIR, file)
     };
     std::fs::read(&path).ok()
+}
+
+// ── Minimal cmap parser (dependency-free) ──────────────────────────────────
+//
+// Just enough of the OpenType spec to answer "does this font cover these code
+// points?". We parse the table directory to locate `cmap`, pick the best
+// Unicode subtable, and decode format 4 (BMP) and format 12 (full Unicode) —
+// the two formats every real-world system font uses for Unicode coverage.
+// All multi-byte integers are big-endian. Every read is bounds-checked; any
+// malformed offset just yields "not covered" rather than panicking.
+
+fn be_u16(d: &[u8], o: usize) -> Option<u16> {
+    d.get(o..o + 2).map(|b| u16::from_be_bytes([b[0], b[1]]))
+}
+fn be_u32(d: &[u8], o: usize) -> Option<u32> {
+    d.get(o..o + 4)
+        .map(|b| u32::from_be_bytes([b[0], b[1], b[2], b[3]]))
+}
+
+/// True if `font` (a .ttf/.otf or .ttc collection) covers every code point in
+/// `wanted`.
+fn font_covers_all(font: &[u8], wanted: &[u32]) -> bool {
+    if wanted.is_empty() {
+        return false;
+    }
+    let Some(cmap) = find_cmap_table(font) else {
+        return false;
+    };
+    wanted.iter().all(|&cp| cmap_covers(font, cmap, cp))
+}
+
+/// Locate the `cmap` table offset, handling both single fonts (`0x00010000` /
+/// `OTTO`) and TrueType collections (`ttcf`, whose first offset table we use).
+fn find_cmap_table(font: &[u8]) -> Option<usize> {
+    let tag = be_u32(font, 0)?;
+    let sfnt_offset = if tag == 0x7474_6366 {
+        // 'ttcf' — collection header: numFonts at 8, first offset table at 12.
+        be_u32(font, 12)? as usize
+    } else {
+        0
+    };
+    let num_tables = be_u16(font, sfnt_offset + 4)? as usize;
+    let dir = sfnt_offset + 12;
+    for i in 0..num_tables {
+        let rec = dir + i * 16;
+        if be_u32(font, rec)? == 0x636d_6170 {
+            // 'cmap'
+            return Some(be_u32(font, rec + 8)? as usize);
+        }
+    }
+    None
+}
+
+/// Pick the best Unicode subtable in the cmap and test coverage of `cp`.
+fn cmap_covers(font: &[u8], cmap: usize, cp: u32) -> bool {
+    let Some(num_sub) = be_u16(font, cmap + 2) else {
+        return false;
+    };
+    // Prefer a full-Unicode subtable (platform 3 / encoding 10, or platform 0)
+    // so we can resolve code points above the BMP; fall back to a BMP subtable.
+    let mut best: Option<(usize, u8)> = None; // (subtable offset, rank)
+    for i in 0..num_sub as usize {
+        let rec = cmap + 4 + i * 8;
+        let (Some(platform), Some(encoding), Some(off)) = (
+            be_u16(font, rec),
+            be_u16(font, rec + 2),
+            be_u32(font, rec + 4),
+        ) else {
+            continue;
+        };
+        let rank = match (platform, encoding) {
+            (3, 10) => 4, // Windows UCS-4
+            (0, 4) | (0, 6) => 4, // Unicode full
+            (3, 1) => 3, // Windows BMP
+            (0, _) => 2, // Unicode BMP
+            _ => 0,
+        };
+        if rank == 0 {
+            continue;
+        }
+        let sub = cmap + off as usize;
+        if best.map_or(true, |(_, r)| rank > r) {
+            best = Some((sub, rank));
+        }
+    }
+    let Some((sub, _)) = best else {
+        return false;
+    };
+    match be_u16(font, sub) {
+        Some(4) => cmap_format4_covers(font, sub, cp),
+        Some(12) => cmap_format12_covers(font, sub, cp),
+        _ => false,
+    }
+}
+
+/// cmap format 4 (segment mapping to delta values), BMP only.
+fn cmap_format4_covers(font: &[u8], sub: usize, cp: u32) -> bool {
+    if cp > 0xFFFF {
+        return false;
+    }
+    let cp = cp as u16;
+    let Some(seg_x2) = be_u16(font, sub + 6) else {
+        return false;
+    };
+    let segs = (seg_x2 / 2) as usize;
+    let end_codes = sub + 14;
+    let start_codes = end_codes + seg_x2 as usize + 2; // +2 reservedPad
+    let id_deltas = start_codes + seg_x2 as usize;
+    let id_range_offsets = id_deltas + seg_x2 as usize;
+    for s in 0..segs {
+        let Some(end) = be_u16(font, end_codes + s * 2) else {
+            return false;
+        };
+        if cp > end {
+            continue;
+        }
+        let Some(start) = be_u16(font, start_codes + s * 2) else {
+            return false;
+        };
+        if cp < start {
+            return false; // segments are sorted; cp falls in a gap
+        }
+        let Some(range_off) = be_u16(font, id_range_offsets + s * 2) else {
+            return false;
+        };
+        if range_off == 0 {
+            // Mapped via idDelta; a non-zero resulting glyph means covered.
+            let Some(delta) = be_u16(font, id_deltas + s * 2) else {
+                return false;
+            };
+            let glyph = cp.wrapping_add(delta);
+            return glyph != 0;
+        }
+        // Mapped via glyphIdArray: index from the idRangeOffset slot.
+        let gid_addr = id_range_offsets
+            + s * 2
+            + range_off as usize
+            + (cp - start) as usize * 2;
+        return match be_u16(font, gid_addr) {
+            Some(0) | None => false,
+            Some(_) => true,
+        };
+    }
+    false
+}
+
+/// cmap format 12 (segmented coverage), full Unicode range.
+fn cmap_format12_covers(font: &[u8], sub: usize, cp: u32) -> bool {
+    let Some(n_groups) = be_u32(font, sub + 12) else {
+        return false;
+    };
+    let groups = sub + 16;
+    // Groups are sorted by startCharCode; binary-search them.
+    let (mut lo, mut hi) = (0u32, n_groups);
+    while lo < hi {
+        let mid = lo + (hi - lo) / 2;
+        let g = groups + mid as usize * 12;
+        let (Some(start), Some(end)) = (be_u32(font, g), be_u32(font, g + 4)) else {
+            return false;
+        };
+        if cp < start {
+            hi = mid;
+        } else if cp > end {
+            lo = mid + 1;
+        } else {
+            return true;
+        }
+    }
+    false
 }
 
 fn role_family_candidates(role: SystemFontRole, _lang: &str) -> Vec<&'static str> {

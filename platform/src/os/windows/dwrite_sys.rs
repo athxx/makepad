@@ -107,6 +107,9 @@ impl IDWriteFontCollection {
         }
         Some(index)
     }
+    unsafe fn GetFontFamilyCount(&self) -> u32 {
+        (Interface::vtable(self).GetFontFamilyCount)(Interface::as_raw(self))
+    }
     unsafe fn GetFontFamily(&self, index: u32) -> Option<IDWriteFontFamily> {
         let mut out: *mut core::ffi::c_void = core::ptr::null_mut();
         let hr =
@@ -217,6 +220,17 @@ struct IDWriteFont_Vtbl {
     ) -> HRESULT,
 }
 impl IDWriteFont {
+    /// True if this font covers `ch` (DirectWrite's cmap lookup).
+    unsafe fn HasCharacter(&self, ch: char) -> bool {
+        let mut exists = BOOL(0);
+        let hr = (Interface::vtable(self).HasCharacter)(
+            Interface::as_raw(self),
+            ch as u32,
+            &mut exists,
+        );
+        hr.is_ok() && exists.0 != 0
+    }
+
     unsafe fn CreateFontFace(&self) -> Option<IDWriteFontFace> {
         let mut out: *mut core::ffi::c_void = core::ptr::null_mut();
         let hr =
@@ -454,6 +468,42 @@ unsafe fn load_system_font_inner(query: &SystemFontQuery) -> Option<Vec<u8>> {
     } else {
         DWRITE_FONT_STYLE_NORMAL
     };
+
+    // Per-glyph fallback: if the caller passed the actual uncovered characters,
+    // find the first installed family whose representative font covers them all
+    // (DirectWrite's `HasCharacter` is a cmap lookup). Enumerating the whole
+    // collection is O(families), but this runs at most once per script (the
+    // caller caches the result and guards with `attempted_scripts`), so it is
+    // acceptable and avoids hand-rolling the `IDWriteFontFallback` /
+    // `IDWriteTextAnalysisSource` COM-callback surface.
+    if !query.sample.is_empty() {
+        let count = collection.GetFontFamilyCount();
+        for index in 0..count {
+            let Some(family) = collection.GetFontFamily(index) else {
+                continue;
+            };
+            let Some(font) =
+                family.GetFirstMatchingFont(weight, DWRITE_FONT_STRETCH_NORMAL, style)
+            else {
+                continue;
+            };
+            if !query.sample.chars().all(|ch| font.HasCharacter(ch)) {
+                continue;
+            }
+            let Some(face) = font.CreateFontFace() else {
+                continue;
+            };
+            let Some(file) = face.GetFirstFile() else {
+                continue;
+            };
+            if let Some(bytes) = file.read_bytes() {
+                if bytes.len() > 1000 {
+                    return Some(bytes);
+                }
+            }
+        }
+        return None;
+    }
 
     for name in role_family_candidates(query.role, &query.lang) {
         let wide = to_wide(name);

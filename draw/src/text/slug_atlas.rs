@@ -676,9 +676,9 @@ mod tests {
         curves
     }
 
-    fn bundled_font_path() -> PathBuf {
+    fn code_rendering_font_path() -> PathBuf {
         // No text fonts are bundled anymore (system fonts are resolved at runtime),
-        // so this test reuses a font that is still bundled for code rendering.
+        // so this test reuses the monospace font that is still bundled for code rendering.
         PathBuf::from(env!("CARGO_MANIFEST_DIR"))
             .join("../widgets/resources/jetbrains_mono_variable.ttf")
     }
@@ -686,7 +686,7 @@ mod tests {
     fn load_test_font() -> std::rc::Rc<crate::text::font::Font> {
         let mut loader = Loader::new(layouter::Settings::default().loader);
         let font_id: FontId = 0x5151_0001_u64.into();
-        let font_data = SharedBytes::from_file_mmap_or_read(bundled_font_path())
+        let font_data = SharedBytes::from_file_mmap_or_read(code_rendering_font_path())
             .expect("font bytes should load");
         loader.define_font(
             font_id,
