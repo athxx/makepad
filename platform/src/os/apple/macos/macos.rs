@@ -1595,6 +1595,32 @@ mod tests {
     use super::*;
 
     #[test]
+    fn system_font_resolves_each_role() {
+        use crate::cx_api::{SystemFontQuery, SystemFontRole};
+        use crate::os::apple::apple_system_fonts::load_system_font;
+        for role in [
+            SystemFontRole::Ui,
+            SystemFontRole::Mono,
+            SystemFontRole::Cjk,
+            SystemFontRole::Emoji,
+        ] {
+            let q = SystemFontQuery {
+                role,
+                weight: 400,
+                italic: false,
+                lang: String::new(),
+            };
+            let bytes = load_system_font(&q).unwrap_or_default();
+            assert!(
+                bytes.len() > 1000,
+                "role {:?} resolved {} bytes",
+                role,
+                bytes.len()
+            );
+        }
+    }
+
+    #[test]
     fn defer_platform_op_breaks_when_requeued_op_is_alone() {
         let window_id = WindowId(0, 0);
         let mut platform_ops = Vec::new();
@@ -1647,6 +1673,10 @@ impl CxOsApi for Cx {
             let _ = sender.send(event);
             SignalToUI::set_ui_signal();
         }));
+    }
+
+    fn os_load_system_font(&mut self, query: &crate::cx_api::SystemFontQuery) -> Option<Vec<u8>> {
+        crate::os::apple::apple_system_fonts::load_system_font(query)
     }
 
     fn spawn_thread<F>(&mut self, f: F)

@@ -251,7 +251,11 @@ mod tests {
         )
     }
 
+    // No emoji font is bundled anymore (color-emoji fonts are resolved from the OS
+    // at runtime, and wasm apps must preset their own). There is no bundled asset to
+    // exercise the color-raster path against, so this test is ignored by default.
     #[test]
+    #[ignore = "no bundled color-emoji font; provide a path manually to run"]
     fn noto_color_emoji_prefers_raster_images() {
         let font = make_font(bundled_emoji_font_path());
         let glyph_id = font

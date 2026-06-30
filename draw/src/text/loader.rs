@@ -199,7 +199,10 @@ mod tests {
     use std::path::PathBuf;
 
     fn bundled_font_path() -> PathBuf {
-        PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("../widgets/resources/IBMPlexSans-Text.ttf")
+        // No text fonts are bundled anymore (system fonts are resolved at runtime),
+        // so this test reuses a font that is still bundled for code rendering.
+        PathBuf::from(env!("CARGO_MANIFEST_DIR"))
+            .join("../widgets/resources/jetbrains_mono_variable.ttf")
     }
 
     #[test]

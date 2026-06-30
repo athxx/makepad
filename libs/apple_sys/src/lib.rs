@@ -1230,6 +1230,9 @@ pub type CFBooleanRef = *const c_void;
 pub type CFDataRef = *const c_void;
 pub type CFErrorRef = *const c_void;
 pub type CFRunLoopRef = *mut c_void;
+pub type CFURLRef = *const c_void;
+pub type CTFontRef = *const c_void;
+pub type CTFontDescriptorRef = *const c_void;
 pub type CFIndex = isize;
 pub type Boolean = u8;
 pub type CFTypeID = usize;
@@ -1886,7 +1889,36 @@ extern "C" {
     pub fn CFRunLoopRun();
     #[cfg(target_os = "macos")]
     pub fn CFRunLoopStop(rl: CFRunLoopRef);
+    pub fn CFGetTypeID(cf: *const c_void) -> CFTypeID;
+    // kCFURLPOSIXPathStyle == 0
+    pub fn CFURLCopyFileSystemPath(anURL: CFURLRef, pathStyle: CFIndex) -> CFStringRef;
 }
+
+// CoreText: used to resolve the platform's default fonts at runtime so apps
+// don't have to bundle text fonts. We ask for a font descriptor by role and
+// read back its on-disk file URL via kCTFontURLAttribute.
+#[link(name = "CoreText", kind = "framework")]
+extern "C" {
+    pub static kCTFontURLAttribute: CFStringRef;
+    pub static kCTFontFamilyNameAttribute: CFStringRef;
+
+    pub fn CTFontCreateUIFontForLanguage(
+        uiType: u32,
+        size: f64,
+        language: CFStringRef,
+    ) -> CTFontRef;
+    pub fn CTFontCreateForString(
+        currentFont: CTFontRef,
+        string: CFStringRef,
+        range: CFRange,
+    ) -> CTFontRef;
+    pub fn CTFontCopyAttribute(font: CTFontRef, attribute: CFStringRef) -> CFTypeRef;
+}
+
+// CTFontUIFontType values (subset we use).
+pub const kCTFontUIFontSystem: u32 = 2;
+pub const kCTFontUIFontEmphasizedSystem: u32 = 3;
+pub const kCTFontUIFontUserFixedPitch: u32 = 5;
 
 #[cfg(target_os = "macos")]
 #[link(name = "IOKit", kind = "framework")]

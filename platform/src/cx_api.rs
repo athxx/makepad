@@ -39,6 +39,60 @@ pub enum OpenUrlInPlace {
     No,
 }
 
+/// The semantic role of a system font we want the OS to resolve for us.
+///
+/// We don't ask the OS for a specific typeface by name; instead we ask for the
+/// platform's default font for a given role (and optionally a language hint, e.g.
+/// "zh" for Chinese), the way Flutter delegates glyph coverage to the platform.
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq, Hash)]
+pub enum SystemFontRole {
+    /// The default UI / sans-serif font (Latin and the platform's primary script).
+    #[default]
+    Ui,
+    /// A serif font.
+    Serif,
+    /// A monospace font.
+    Mono,
+    /// The CJK fallback font (Chinese / Japanese / Korean).
+    Cjk,
+    /// The color emoji font.
+    Emoji,
+}
+
+/// A request for a system font. Resolved at runtime by the per-platform
+/// [`CxOsApi::os_load_system_font`] implementation.
+#[derive(Clone, Debug, PartialEq)]
+pub struct SystemFontQuery {
+    pub role: SystemFontRole,
+    /// OpenType weight (100..=900). 400 = regular, 700 = bold.
+    pub weight: u32,
+    pub italic: bool,
+    /// Optional BCP-47-ish language hint (e.g. "zh", "ja", "ko") used to bias CJK
+    /// resolution. Empty means "no hint".
+    pub lang: String,
+}
+
+impl Default for SystemFontQuery {
+    fn default() -> Self {
+        Self {
+            role: SystemFontRole::Ui,
+            weight: 400,
+            italic: false,
+            lang: String::new(),
+        }
+    }
+}
+
+impl std::hash::Hash for SystemFontQuery {
+    fn hash<H: std::hash::Hasher>(&self, state: &mut H) {
+        self.role.hash(state);
+        self.weight.hash(state);
+        self.italic.hash(state);
+        self.lang.hash(state);
+    }
+}
+impl Eq for SystemFontQuery {}
+
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq, Hash)]
 pub enum CxThreadPriority {
     #[default]
@@ -148,6 +202,16 @@ impl<'a> CxSystemBrowser<'a> {
 
 pub trait CxOsApi {
     fn init_cx_os(&mut self);
+
+    /// Resolve a system font for the given query and return its raw bytes
+    /// (a single TTF/OTF/TTC face's file contents).
+    ///
+    /// Returns `None` when the platform cannot resolve the font (or has no system
+    /// font access, e.g. wasm). Callers must tolerate `None` — a font family member
+    /// that fails to resolve is simply skipped, and the remaining members render.
+    fn os_load_system_font(&mut self, _query: &SystemFontQuery) -> Option<Vec<u8>> {
+        None
+    }
 
     fn spawn_thread<F>(&mut self, f: F)
     where
@@ -767,6 +831,24 @@ impl Cx {
         }
 
         self.get_resource(handle).map(SharedBytes::from_owned)
+    }
+
+    /// Resolve a system font for `query`, caching the result by query.
+    ///
+    /// Returns the font file bytes the OS handed back, or `None` if the platform
+    /// has no system-font API (e.g. wasm) or the OS could not satisfy the query.
+    /// The result (including the negative case) is cached so we ask the OS at
+    /// most once per distinct query.
+    pub fn resolve_system_font(&mut self, query: &SystemFontQuery) -> Option<Rc<Vec<u8>>> {
+        if let Some(cached) = self.script_data.system_font_bytes.borrow().get(query) {
+            return cached.clone();
+        }
+        let bytes = self.os_load_system_font(query).map(Rc::new);
+        self.script_data
+            .system_font_bytes
+            .borrow_mut()
+            .insert(query.clone(), bytes.clone());
+        bytes
     }
 
     pub fn null_texture(&self) -> Texture {
