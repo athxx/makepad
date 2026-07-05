@@ -11,31 +11,31 @@ use std::{
 fn main() {
     let net = NetworkRuntime::new(NetworkConfig::default());
     let (tx_request, rx_request) = mpsc::channel::<HttpServerRequest> ();
-    
+
     #[cfg(target_os = "linux")]
     let addr = SocketAddr::from(([0, 0, 0, 0], 80));
     #[cfg(target_os = "macos")]
     let addr = SocketAddr::from(([127, 0, 0, 1], 61234));
-    
+
     let args: Vec<String> = std::env::args().collect();
-    
+
     if args.len()!=2{
         println!("Pass in root path as first arg");
     }
     let root_path = args[1].clone();
-    
+
     net.start_http_server(HttpServer{
         listen_address:addr,
         post_max_size: 1024*1024,
         request: tx_request
     });
     println!("Server listening on {}", addr);
-    
+
     //let route_secret = fs::read_to_string("route_secret.txt").unwrap_or("\nNO\nACCESS\n".to_string()).trim().to_string();
     //let route_start = format!("/route/{}", route_secret);
     //let mut route_connections = HashMap::new();
-    
-    
+
+
     //let abs_makepad_path = std::env::current_dir().unwrap().join(makepad_path.clone()).canonicalize().unwrap().to_str().unwrap().to_string();
     //let remaps = [
         //(format!("/makepad/{}/",abs_makepad_path),makepad_path.clone()),
@@ -47,21 +47,21 @@ fn main() {
     while let Ok(message) = rx_request.recv() {
         match message{
             HttpServerRequest::ConnectWebSocket {web_socket_id:_, response_sender:_, headers:_}=>{
-                
+
             },
             HttpServerRequest::DisconnectWebSocket {web_socket_id:_}=>{
-                
+
             },
             HttpServerRequest::BinaryMessage {web_socket_id:_, response_sender:_, data:_}=>{
-                
+
             }
             HttpServerRequest::TextMessage { web_socket_id:_, response_sender:_, string:_ }=>{
-                
+
             }
             HttpServerRequest::Get{headers, response_sender}=>{
                 let path = &headers.path;
-                
-                
+
+
                 if path == "/$watch"{
                     let header = "HTTP/1.1 200 OK\r\n\
                             Cache-Control: max-age:0\r\n\
@@ -69,13 +69,13 @@ fn main() {
                     let _ = response_sender.send(HttpServerResponse{header, body:vec![]});
                     continue
                 }
-                
+
                 if path == "/favicon.ico"{
                     let header = "HTTP/1.1 200 OK\r\n\r\n".to_string();
                     let _ = response_sender.send(HttpServerResponse{header, body:vec![]});
                     continue
                 }
-                
+
                 let mime_type = if path.ends_with(".html") {"text/html"}
                 else if path.ends_with(".wasm") {"application/wasm"}
                 else if path.ends_with(".css") {"text/css"}
@@ -83,7 +83,7 @@ fn main() {
                 else if path.ends_with(".ttf") {"application/ttf"}
                 else if path.ends_with(".png") {"image/png"}
                 else if path.ends_with(".woff"){"font/woff"}
-		              else if path.ends_with(".woff2"){"font/woff2"}
+                else if path.ends_with(".woff2"){"font/woff2"}
                 else if path.ends_with(".jpg") {"image/jpg"}
                 else if path.ends_with(".svg") {"image/svg+xml"}
                 else if path.ends_with(".md") {"text/markdown"}
@@ -96,7 +96,7 @@ fn main() {
                     ""
                 }
                 else{"Cross-Origin-Embedder-Policy: require-corp\r\nCross-Origin-Opener-Policy: same-origin\r\n"};
-                
+
                 //let mut strip = None;
                 //for remap in &remaps{
                 //    if let Some(s) = path.strip_prefix(&remap.0){
@@ -117,7 +117,7 @@ fn main() {
                             Cache-Control: max-age:0\r\n\
                             Content-Length: {}\r\n\
                             Connection: close\r\n\r\n",
-                            
+
                             mime_type,
                             body.len()
                         );

@@ -23,6 +23,7 @@ use {
         mem,
         rc::Rc,
     },
+    unicode_script::Script,
     unicode_segmentation::UnicodeSegmentation,
 };
 
@@ -222,6 +223,11 @@ struct LayoutContext {
     current_row_end: usize,
     rows: Vec<LaidoutRow>,
     glyphs: Vec<LaidoutGlyph>,
+    /// De-duplicated Unicode scripts of characters that no font in the family
+    /// could cover during this layout (accumulated from each shaped run). The
+    /// Cx-aware caller (`DrawText::layout`) reads this from the produced
+    /// `LaidoutText` to ask the OS for covering fonts.
+    missing_scripts: Vec<Script>,
 }
 
 impl LayoutContext {
@@ -241,6 +247,17 @@ impl LayoutContext {
             current_row_end: 0,
             rows: Vec::new(),
             glyphs: Vec::new(),
+            missing_scripts: Vec::new(),
+        }
+    }
+
+    /// Merges the scripts a shaped run could not cover into the running set,
+    /// de-duplicating. Called from every path that consumes a `ShapedText`.
+    fn accumulate_missing_scripts(&mut self, scripts: &[Script]) {
+        for &script in scripts {
+            if !self.missing_scripts.contains(&script) {
+                self.missing_scripts.push(script);
+            }
         }
     }
 
@@ -377,6 +394,7 @@ impl LayoutContext {
     }
 
     fn append_text(&mut self, text: &ShapedText) {
+        self.accumulate_missing_scripts(&text.missing_scripts);
         for glyph in &text.glyphs {
             let mut glyph = LaidoutGlyph {
                 origin_in_lpxs: Point::ZERO,
@@ -398,10 +416,25 @@ impl LayoutContext {
     fn finish_current_row(&mut self, newline: bool) {
         let font = self.font_family.fonts().first();
         let font_size_in_lpxs = self.style.font_size_in_lpxs();
-        let ascender_in_lpxs = font.map_or(0.0, |font| font.ascender_in_ems()) * font_size_in_lpxs;
-        let descender_in_lpxs =
+        // The primary font's metrics are the floor (so empty rows still get a
+        // sensible height). Then expand to the largest ascent / deepest descent /
+        // widest line-gap across the fonts actually used by this row's glyphs:
+        // fallback fonts (notably color emoji, whose bitmaps span a full 1.0 em
+        // above the baseline) can be taller than the primary text font, and
+        // reserving only the primary font's ascent would clip their tops.
+        let mut ascender_in_lpxs =
+            font.map_or(0.0, |font| font.ascender_in_ems()) * font_size_in_lpxs;
+        let mut descender_in_lpxs =
             font.map_or(0.0, |font| font.descender_in_ems()) * font_size_in_lpxs;
-        let line_gap_in_lpxs = font.map_or(0.0, |font| font.line_gap_in_ems()) * font_size_in_lpxs;
+        let mut line_gap_in_lpxs =
+            font.map_or(0.0, |font| font.line_gap_in_ems()) * font_size_in_lpxs;
+        for glyph in &self.glyphs {
+            ascender_in_lpxs = ascender_in_lpxs.max(glyph.ascender_in_lpxs());
+            // Descender is negative (below baseline); the deepest row descent is
+            // the minimum.
+            descender_in_lpxs = descender_in_lpxs.min(glyph.descender_in_lpxs());
+            line_gap_in_lpxs = line_gap_in_lpxs.max(glyph.line_gap_in_lpxs());
+        }
 
         let text = self
             .text
@@ -439,18 +472,20 @@ impl LayoutContext {
 
     fn finish_with(self, is_truncated: bool) -> LaidoutText {
         let last_row = self.rows.last().unwrap();
+        let size_in_lpxs = Size::new(
+            self.rows
+                .iter()
+                .map(|row| row.width_in_lpxs)
+                .reduce(f32::max)
+                .unwrap_or(0.0),
+            last_row.origin_in_lpxs.y - last_row.descender_in_lpxs,
+        );
         LaidoutText {
             text: self.text,
-            size_in_lpxs: Size::new(
-                self.rows
-                    .iter()
-                    .map(|row| row.width_in_lpxs)
-                    .reduce(f32::max)
-                    .unwrap_or(0.0),
-                last_row.origin_in_lpxs.y - last_row.descender_in_lpxs,
-            ),
+            size_in_lpxs,
             rows: self.rows,
             is_truncated,
+            missing_scripts: self.missing_scripts,
         }
     }
 
@@ -503,6 +538,7 @@ impl LayoutContext {
     /// Truncates the last row to fit within `max_width` and appends an ellipsis glyph.
     fn truncate_last_row_with_ellipsis(&mut self, max_width: f32) {
         let ellipsis_shaped = self.font_family.get_or_shape("…".into());
+        self.accumulate_missing_scripts(&ellipsis_shaped.missing_scripts);
         let font_size_in_lpxs = self.style.font_size_in_lpxs();
         let ellipsis_width: f32 = ellipsis_shaped
             .glyphs
@@ -970,6 +1006,11 @@ pub struct LaidoutText {
     pub rows: Vec<LaidoutRow>,
     /// True when the text was truncated (e.g., due to `max_rows` or ellipsis).
     pub is_truncated: bool,
+    /// De-duplicated Unicode scripts of characters that no font in the family
+    /// could cover. Empty in the common case. The Cx-aware caller
+    /// (`DrawText::layout`) reads this to dynamically fetch system fonts that
+    /// cover these scripts and reshape on the next frame.
+    pub missing_scripts: Vec<Script>,
 }
 
 impl LaidoutText {
