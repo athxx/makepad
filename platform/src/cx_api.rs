@@ -1446,34 +1446,15 @@ impl Cx {
     }
 
     pub fn redraw_list_in_draw(&mut self, draw_list_id: DrawListId) {
-        if self
-            .new_draw_event
-            .draw_lists
-            .iter()
-            .position(|v| *v == draw_list_id)
-            .is_some()
-        {
-            return;
-        }
-        self.new_draw_event.draw_lists.push(draw_list_id);
+        self.new_draw_event.push_draw_list(draw_list_id);
     }
 
     pub fn redraw_list_and_children(&mut self, draw_list_id: DrawListId) {
         if self.in_draw_event {
             return;
         }
-        if self
-            .new_draw_event
-            .draw_lists_and_children
-            .iter()
-            .position(|v| *v == draw_list_id)
-            .is_some()
-        {
-            return;
-        }
         self.new_draw_event
-            .draw_lists_and_children
-            .push(draw_list_id);
+            .push_draw_list_and_children(draw_list_id);
     }
 
     pub fn get_ime_area_rect(&self) -> Rect {

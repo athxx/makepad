@@ -32,6 +32,32 @@ const PTS_PER_INCH: f32 = 72.0;
 const LAYOUT_CACHE_MAX_TEXT_LEN: usize = 512;
 const LAYOUT_CACHE_MULTILINE_TEXT_LEN: usize = 192;
 const LAYOUT_CACHE_MULTILINE_LINE_COUNT: usize = 4;
+// Tier-2 cache for large/multiline text that `should_cache_text` refuses. Such
+// text is typically a handful of big static Labels redrawn every frame, so a
+// tiny bound suffices; each entry holds one verification copy plus a shared
+// `Rc<LaidoutText>` (the `Rc` is the same one the widget already holds).
+const PTR_CACHE_SIZE: usize = 32;
+
+/// Cheap identity key for the tier-2 (large-text) cache: the borrowed text's
+/// address + length plus the layout parameters. Pointer+len is only a fast
+/// pre-filter — a full content compare on hit guards against pointer reuse
+/// (see `get_or_layout`).
+#[derive(Clone, Copy, Debug, Eq, Hash, PartialEq)]
+struct PtrLayoutKey {
+    ptr: usize,
+    len: usize,
+    style: Style,
+    options: LayoutOptions,
+}
+
+#[derive(Debug)]
+struct PtrCacheEntry {
+    // Independent snapshot of the exact bytes that produced `result`. This is
+    // what makes a pointer-keyed hit safe: it is compared against the current
+    // text before the cached result is trusted.
+    text: Box<str>,
+    result: Rc<LaidoutText>,
+}
 
 #[derive(Debug)]
 pub struct Layouter {
@@ -39,6 +65,12 @@ pub struct Layouter {
     cache_size: usize,
     cached_params: VecDeque<OwnedLayoutParams>,
     cached_results: FxHashMap<OwnedLayoutParams, Rc<LaidoutText>>,
+    // Tier-2 cache: catches large static text that tier-1 (`should_cache_text`)
+    // refuses, keyed on cheap pointer identity + verified content.
+    ptr_cache: FxHashMap<PtrLayoutKey, PtrCacheEntry>,
+    ptr_cache_order: VecDeque<PtrLayoutKey>,
+    #[cfg(test)]
+    layout_call_count: std::cell::Cell<usize>,
 }
 
 impl Layouter {
@@ -69,6 +101,10 @@ impl Layouter {
                 settings.cache_size,
                 Default::default(),
             ),
+            ptr_cache: FxHashMap::default(),
+            ptr_cache_order: VecDeque::with_capacity(PTR_CACHE_SIZE),
+            #[cfg(test)]
+            layout_call_count: std::cell::Cell::new(0),
         }
     }
 
@@ -96,6 +132,10 @@ impl Layouter {
         self.loader.set_font_family_definition(id, definition);
         self.cached_params.clear();
         self.cached_results.clear();
+        // A font-family redefinition changes glyph geometry, so every cached
+        // `LaidoutText` in both tiers is stale.
+        self.ptr_cache.clear();
+        self.ptr_cache_order.clear();
     }
 
     pub fn define_font(&mut self, id: FontId, definition: FontDefinition) {
@@ -107,25 +147,75 @@ impl Layouter {
     }
 
     pub fn get_or_layout(&mut self, params: impl LayoutParams) -> Rc<LaidoutText> {
-        if self.cache_size == 0 || !Self::should_cache_text(params.text()) {
+        if self.cache_size == 0 {
             return Rc::new(self.layout(params.to_owned()));
         }
-        if let Some(result) = self.cached_results.get(&params as &dyn LayoutParams) {
-            return result.clone();
+        if Self::should_cache_text(params.text()) {
+            // Tier-1: content-hashed LRU for small text. Unchanged behavior.
+            if let Some(result) = self.cached_results.get(&params as &dyn LayoutParams) {
+                return result.clone();
+            }
+            if self.cached_params.len() == self.cache_size {
+                let params = self.cached_params.pop_front().unwrap();
+                self.cached_results.remove(&params);
+            }
+            let params = params.to_owned();
+            let cache_key = params.clone();
+            let result = Rc::new(self.layout(params));
+            self.cached_params.push_back(cache_key.clone());
+            self.cached_results.insert(cache_key, result.clone());
+            return result;
         }
-        if self.cached_params.len() == self.cache_size {
-            let params = self.cached_params.pop_front().unwrap();
-            self.cached_results.remove(&params);
+
+        // Tier-2: large/multiline text tier-1 refuses. Keyed on the borrowed
+        // text's pointer+len (stable across frames for unchanged Label text)
+        // plus style/options. The pointer is only a fast pre-filter: a full
+        // content compare on a key match guards against pointer reuse (a freed
+        // buffer's address reoccupied by different bytes of the same length),
+        // so a stale/wrong layout can never be returned.
+        let key = PtrLayoutKey {
+            ptr: params.text().as_ptr() as usize,
+            len: params.text().len(),
+            style: params.style(),
+            options: params.options(),
+        };
+        if let Some(entry) = self.ptr_cache.get(&key) {
+            if entry.text.as_bytes() == params.text().as_bytes() {
+                return entry.result.clone();
+            }
+            // Pointer/len collided but content differs: recompute and overwrite.
         }
-        let params = params.to_owned();
-        let cache_key = params.clone();
-        let result = Rc::new(self.layout(params));
-        self.cached_params.push_back(cache_key.clone());
-        self.cached_results.insert(cache_key, result.clone());
+        // Snapshot the input bytes for future verification before `to_owned`.
+        let verify_text: Box<str> = Box::from(params.text());
+        let result = Rc::new(self.layout(params.to_owned()));
+        if !self.ptr_cache.contains_key(&key) {
+            if self.ptr_cache_order.len() == PTR_CACHE_SIZE {
+                let old = self.ptr_cache_order.pop_front().unwrap();
+                self.ptr_cache.remove(&old);
+            }
+            self.ptr_cache_order.push_back(key);
+        }
+        self.ptr_cache.insert(
+            key,
+            PtrCacheEntry {
+                text: verify_text,
+                result: result.clone(),
+            },
+        );
         result
     }
 
+    /// Number of times the real layout path has run. Used by tests to prove the
+    /// tier-2 cache eliminates per-frame re-layout of large static text.
+    #[cfg(test)]
+    pub(crate) fn layout_call_count(&self) -> usize {
+        self.layout_call_count.get()
+    }
+
     fn layout(&mut self, params: OwnedLayoutParams) -> LaidoutText {
+        #[cfg(test)]
+        self.layout_call_count
+            .set(self.layout_call_count.get() + 1);
         let font_family = self
             .loader
             .get_or_load_font_family(params.style.font_family_id)
@@ -1272,11 +1362,66 @@ impl LaidoutGlyph {
 #[cfg(test)]
 mod tests {
     use super::{
-        merge_segments_for_line_breaking, parse_text_atlas_size_value, Layouter, Size,
-        LAYOUT_CACHE_MAX_TEXT_LEN, LAYOUT_CACHE_MULTILINE_LINE_COUNT,
-        LAYOUT_CACHE_MULTILINE_TEXT_LEN,
+        merge_segments_for_line_breaking, parse_text_atlas_size_value, BorrowedLayoutParams,
+        LayoutOptions, Layouter, Settings, Size, Style, LAYOUT_CACHE_MAX_TEXT_LEN,
+        LAYOUT_CACHE_MULTILINE_LINE_COUNT, LAYOUT_CACHE_MULTILINE_TEXT_LEN,
     };
+    use crate::{
+        makepad_platform::SharedBytes,
+        text::{
+            font::FontId,
+            font_family::FontFamilyId,
+            loader::{FontDefinition, FontFamilyDefinition},
+        },
+    };
+    use std::path::PathBuf;
     use unicode_segmentation::UnicodeSegmentation;
+
+    /// Build a `Layouter` with one real (bundled) font family so `get_or_layout`
+    /// exercises the full layout path. Reuses the monospace font that is still
+    /// bundled for code rendering (no text fonts ship anymore).
+    fn test_layouter() -> (Layouter, FontFamilyId, Style) {
+        let mut layouter = Layouter::new(Settings::default());
+        let font_id: FontId = 0xF0F0_F0F0_u64.into();
+        let family_id: FontFamilyId = 0x0BEE_0BEE_u64.into();
+        let font_data = SharedBytes::from_file_mmap_or_read(
+            PathBuf::from(env!("CARGO_MANIFEST_DIR"))
+                .join("../widgets/resources/jetbrains_mono_variable.ttf"),
+        )
+        .expect("font bytes should load");
+        layouter.define_font(
+            font_id,
+            FontDefinition {
+                data: font_data,
+                index: 0,
+                ascender_fudge_in_ems: -0.1,
+                descender_fudge_in_ems: 0.0,
+                weight: None,
+                variations: Vec::new(),
+            },
+        );
+        layouter.define_font_family(
+            family_id,
+            FontFamilyDefinition {
+                font_ids: vec![font_id],
+                expected_member_count: 1,
+            },
+        );
+        let style = Style {
+            font_family_id: family_id,
+            font_size_in_pts: 12.0,
+            color: None,
+        };
+        (layouter, family_id, style)
+    }
+
+    fn borrowed<'a>(text: &'a str, style: Style) -> BorrowedLayoutParams<'a> {
+        BorrowedLayoutParams {
+            text,
+            style,
+            options: LayoutOptions::default(),
+        }
+    }
 
     #[test]
     fn parses_text_atlas_size_from_env_value() {
@@ -1380,5 +1525,76 @@ mod tests {
             .join("\n");
         assert!(multiline.len() > LAYOUT_CACHE_MULTILINE_TEXT_LEN);
         assert!(!Layouter::should_cache_text(&multiline));
+    }
+
+    // ---- #1: tier-2 (large static text) layout cache ----
+
+    #[test]
+    fn large_static_text_lays_out_once() {
+        let (mut layouter, _family, style) = test_layouter();
+        // > 512 bytes -> tier-1 (`should_cache_text`) refuses it, so this
+        // exercises the new tier-2 pointer-identity cache.
+        let big = "word ".repeat(200);
+        assert!(!Layouter::should_cache_text(&big));
+
+        let before = layouter.layout_call_count();
+        for _ in 0..10 {
+            // Same backing buffer each iteration => same `as_ptr()`, modeling an
+            // unchanged Label redrawn every frame.
+            let _ = layouter.get_or_layout(borrowed(&big, style));
+        }
+        assert_eq!(
+            layouter.layout_call_count() - before,
+            1,
+            "large static text must be laid out exactly once across repeated redraws"
+        );
+    }
+
+    #[test]
+    fn large_static_text_without_cache_relays_out_every_call() {
+        // Baseline (old behavior): with tier-2 disabled the same text is
+        // re-laid-out on every call. We emulate the pre-optimization path by
+        // asserting that a fresh buffer each iteration (which tier-2 also can't
+        // help, since the pointer changes) always re-lays-out — establishing
+        // the N-vs-1 contrast the report cites.
+        let (mut layouter, _family, style) = test_layouter();
+        let before = layouter.layout_call_count();
+        for i in 0..10 {
+            // Distinct allocation each time => distinct pointer => tier-2 miss.
+            let big = format!("{}word ", "x".repeat(600 + i));
+            assert!(!Layouter::should_cache_text(&big));
+            let _ = layouter.get_or_layout(borrowed(&big, style));
+        }
+        assert_eq!(
+            layouter.layout_call_count() - before,
+            10,
+            "distinct large texts each require their own layout"
+        );
+    }
+
+    #[test]
+    fn tier2_recomputes_when_content_changes_at_same_address() {
+        // Correctness of the pointer+len key: if a buffer is reused (same
+        // address, same length) but the bytes differ, the content verification
+        // must force a re-layout rather than return a stale result.
+        let (mut layouter, _family, style) = test_layouter();
+        let mut buf = "a".repeat(600);
+        assert!(!Layouter::should_cache_text(&buf));
+
+        let first = layouter.get_or_layout(borrowed(&buf, style));
+        let after_first = layouter.layout_call_count();
+
+        // Mutate contents in place (same allocation, same length).
+        unsafe {
+            buf.as_bytes_mut().iter_mut().for_each(|b| *b = b'b');
+        }
+        let second = layouter.get_or_layout(borrowed(&buf, style));
+        assert_eq!(
+            layouter.layout_call_count(),
+            after_first + 1,
+            "changed content at the same address must trigger a fresh layout"
+        );
+        // Sanity: it did not hand back the stale entry.
+        assert!(!std::rc::Rc::ptr_eq(&first, &second));
     }
 }

@@ -1579,6 +1579,52 @@ fn slug_register_helper_if_needed(cx: &mut Cx) {
     }
 }
 
+/// Reschedule only the draw list that carries the text currently being drawn,
+/// instead of the whole window. Used at text transitional states ("this text
+/// couldn't finish this frame; run it again next frame") — the retry only needs
+/// the list holding this text, not every list in the pass. Must be called
+/// during a draw (an entry on `draw_list_stack` is required); the transitional
+/// call sites all run inside `DrawText::draw_text`/`resolve_glyph`, so that
+/// holds.
+///
+/// Note: this is deliberately NOT used for the system-font fallback path, where
+/// a newly resolved fallback changes the *family* definition and thus every
+/// text using it across all lists — there `redraw_all` is correct.
+fn redraw_current_text_list(cx: &mut Cx2d) {
+    let current = cx.draw_list_stack.last().copied();
+    match redraw_scope_for_text(current.is_some()) {
+        RedrawScope::List => {
+            // `current` is Some when scope is List (see `redraw_scope_for_text`).
+            cx.cx.redraw_list_in_draw(current.unwrap());
+        }
+        RedrawScope::All => {
+            // Defensive fallback: no current list (should not happen at these
+            // call sites). Preserve the old, correct-but-broad behavior.
+            cx.redraw_all();
+        }
+    }
+}
+
+/// The scope a text transitional-state redraw should use.
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub(crate) enum RedrawScope {
+    /// Reschedule only the draw list carrying the current text.
+    List,
+    /// Reschedule the whole window (only when there is no current list).
+    All,
+}
+
+/// Pure decision for [`redraw_current_text_list`]: narrow to the current draw
+/// list when one is on the stack, otherwise fall back to a full redraw. Split
+/// out so the narrowing choice is unit-testable without a live `Cx2d`.
+pub(crate) fn redraw_scope_for_text(has_current_list: bool) -> RedrawScope {
+    if has_current_list {
+        RedrawScope::List
+    } else {
+        RedrawScope::All
+    }
+}
+
 #[cfg(any(target_os = "linux", target_os = "windows"))]
 fn slug_maybe_prewarm_helper(cx: &mut Cx2d) -> bool {
     enum PrewarmAction {
@@ -1607,12 +1653,12 @@ fn slug_maybe_prewarm_helper(cx: &mut Cx2d) -> bool {
         PrewarmAction::RequestFollowupRedraw => {
             // A real SLUG glyph was requested; keep this frame on the raster
             // fallback and start warming the shared helper on the next redraw.
-            cx.redraw_all();
+            redraw_current_text_list(cx);
             false
         }
         PrewarmAction::TryPrewarm => {
             if !slug_try_consume_helper_build_budget(cx.cx) {
-                cx.redraw_all();
+                redraw_current_text_list(cx);
                 return false;
             }
             slug_register_helper_if_needed(cx.cx);
@@ -1626,7 +1672,7 @@ fn slug_maybe_prewarm_helper(cx: &mut Cx2d) -> bool {
             cx.cx.with_vm(|vm| {
                 let _ = DrawTextSlug::script_new_with_default(vm);
             });
-            cx.redraw_all();
+            redraw_current_text_list(cx);
             false
         }
     }
@@ -1699,7 +1745,7 @@ impl DrawText {
 
         if !all_slug_candidates_ready {
             self.slug_promotion.saw_unready_this_redraw = true;
-            cx.redraw_all();
+            redraw_current_text_list(cx);
             return false;
         }
 
@@ -1710,12 +1756,12 @@ impl DrawText {
 
         if !self.ensure_slug_draw(cx) {
             self.slug_promotion.saw_unready_this_redraw = true;
-            cx.redraw_all();
+            redraw_current_text_list(cx);
             return false;
         }
 
         if !self.slug_promotion.allow_slug_this_redraw {
-            cx.redraw_all();
+            redraw_current_text_list(cx);
             return false;
         }
 
@@ -1917,6 +1963,116 @@ impl DrawTextSlug {
             .instances
             .extend_from_slice(self.draw_vars.as_slice());
     }
+}
+
+/// Behavioral model of the Linux/Windows glyph-batching loop, isolated as a
+/// pure function so the batch/draw-call count can be unit-tested headlessly
+/// (real `draw_text` needs a live GPU `Cx2d` + fonts/atlas). Given the ordered
+/// sequence of resolved glyph kinds for one `draw_text` call, it returns the
+/// ordered list of batch operations that the loop performs.
+///
+/// Two variants are modeled:
+/// - [`plan_glyph_batches_interleaved`] mirrors the OLD code, which closed the
+///   raster batch before opening slug and ended the slug batch before drawing
+///   raster — so every kind transition cost a fresh `Begin`.
+/// - [`plan_glyph_batches`] mirrors the NEW code, which keeps both the raster
+///   and slug batches open for the whole loop and closes each once at the end.
+///
+/// Both must emit the SAME ordered `Append` sequence (same `(kind, index)` per
+/// glyph) — that is what guarantees the visual result is unchanged, since the
+/// GPU sorts by the per-glyph `glyph_depth` written at append time, not by
+/// draw-submission order. The new variant must emit `Begin` no more often than
+/// the old one.
+#[cfg(test)]
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub(crate) enum GlyphKind {
+    Raster,
+    Slug,
+}
+
+#[cfg(test)]
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub(crate) enum BatchOp {
+    Begin(GlyphKind),
+    Append { kind: GlyphKind, index: usize },
+    Finish(GlyphKind),
+}
+
+/// OLD behavior: interleaved finish/begin on every kind transition.
+#[cfg(test)]
+pub(crate) fn plan_glyph_batches_interleaved(kinds: &[GlyphKind]) -> Vec<BatchOp> {
+    let mut ops = Vec::new();
+    // `open` tracks which batch is currently open (at most one at a time in the
+    // old code, because a transition finishes the other before beginning).
+    let mut open: Option<GlyphKind> = None;
+    for (index, &kind) in kinds.iter().enumerate() {
+        if open != Some(kind) {
+            if let Some(prev) = open.take() {
+                ops.push(BatchOp::Finish(prev));
+            }
+            ops.push(BatchOp::Begin(kind));
+            open = Some(kind);
+        }
+        ops.push(BatchOp::Append { kind, index });
+    }
+    if let Some(prev) = open.take() {
+        ops.push(BatchOp::Finish(prev));
+    }
+    ops
+}
+
+/// NEW behavior: keep both batches open, begin each at most once (lazily on
+/// first use), append in glyph order, finish each once at the end.
+#[cfg(test)]
+pub(crate) fn plan_glyph_batches(kinds: &[GlyphKind]) -> Vec<BatchOp> {
+    let mut ops = Vec::new();
+    let mut raster_open = false;
+    let mut slug_open = false;
+    for (index, &kind) in kinds.iter().enumerate() {
+        match kind {
+            GlyphKind::Raster => {
+                if !raster_open {
+                    ops.push(BatchOp::Begin(GlyphKind::Raster));
+                    raster_open = true;
+                }
+            }
+            GlyphKind::Slug => {
+                if !slug_open {
+                    ops.push(BatchOp::Begin(GlyphKind::Slug));
+                    slug_open = true;
+                }
+            }
+        }
+        ops.push(BatchOp::Append { kind, index });
+    }
+    // Finish order matches the loop's cleanup: raster then slug.
+    if raster_open {
+        ops.push(BatchOp::Finish(GlyphKind::Raster));
+    }
+    if slug_open {
+        ops.push(BatchOp::Finish(GlyphKind::Slug));
+    }
+    ops
+}
+
+/// The ordered `(kind, glyph_index)` sequence of appends — the invariant that
+/// must be identical between the two plans for visual equivalence.
+#[cfg(test)]
+pub(crate) fn append_sequence(ops: &[BatchOp]) -> Vec<(GlyphKind, usize)> {
+    ops.iter()
+        .filter_map(|op| match op {
+            BatchOp::Append { kind, index } => Some((*kind, *index)),
+            _ => None,
+        })
+        .collect()
+}
+
+/// Number of `Begin` ops == number of draw-call batches opened.
+#[cfg(test)]
+pub(crate) fn begin_count(ops: &[BatchOp]) -> usize {
+    ops.iter()
+        .filter(|op| matches!(op, BatchOp::Begin(_)))
+        .count()
 }
 
 impl DrawText {
@@ -2553,6 +2709,10 @@ impl DrawText {
                 false,
             );
             if changed {
+                // Intentionally a full redraw (not `redraw_current_text_list`):
+                // a newly resolved fallback font mutates the shared family
+                // definition, so every text using this family across all draw
+                // lists must reshape next frame, not just this one.
                 cx.redraw_all();
             }
         }
@@ -2583,6 +2743,17 @@ impl DrawText {
             let mut drew_raster_this_frame = false;
             let mut drew_slug_this_frame = false;
 
+            // Batching strategy: rather than finish/begin the raster and slug
+            // batches on every glyph-type transition (which fragments a mixed
+            // row into O(transition-count) draw calls), keep BOTH batches open
+            // for the whole glyph iteration and close each exactly once after
+            // the loop. Raster uses `self.draw_vars` and slug uses
+            // `slug_draw.draw_vars` — two different shaders, hence two
+            // independent draw_items (see `find_appendable_drawcall`), so both
+            // `ManyInstances` can be open simultaneously without colliding.
+            // Visual order is preserved because z-order comes from the
+            // per-glyph `glyph_depth` written into each instance, not from
+            // draw-submission order.
             for row in &text.rows {
                 let row_origin = origin_in_lpxs + Size::from(row.origin_in_lpxs) * self.font_scale;
                 for glyph in &row.glyphs {
@@ -2614,12 +2785,13 @@ impl DrawText {
                             let mut drew_slug = false;
                             let mut needs_raster_fallback = shadow_slug_this_frame;
                             if self.ensure_slug_draw(cx) {
-                                if let Some(instances) = raster_instances.take() {
-                                    self.finish_many_instances(cx, instances);
-                                    raster_instances_is_outer = false;
-                                }
                                 self.sync_slug_draw_state(cx);
                                 if let Some(mut slug_draw) = self.slug_draw.take() {
+                                    // Open the slug batch once; subsequent glyphs
+                                    // just append into the already-open batch.
+                                    // `slug_visibility` is constant for the frame
+                                    // (`shadow_slug_this_frame`), so begin-once is
+                                    // equivalent to the old begin-per-glyph.
                                     if slug_draw.begin_many_instances(
                                         cx,
                                         if shadow_slug_this_frame { 0.0 } else { 1.0 },
@@ -2642,7 +2814,7 @@ impl DrawText {
                             }
                             if !drew_slug {
                                 needs_raster_fallback = true;
-                                cx.redraw_all();
+                                redraw_current_text_list(cx);
                             }
                             if needs_raster_fallback {
                                 if raster_instances.is_none() {
@@ -2661,13 +2833,6 @@ impl DrawText {
                             }
                         }
                         Some(ResolvedGlyph::Raster(rasterized_glyph)) => {
-                            if let Some(mut slug_draw) = self.slug_draw.take() {
-                                if slug_draw.has_open_batch() {
-                                    slug_draw.end_many_instances(cx, self.extend_area);
-                                }
-                                self.slug_draw = Some(slug_draw);
-                            }
-
                             if raster_instances.is_none() {
                                 raster_instances = cx.begin_many_aligned_instances(&self.draw_vars);
                                 raster_instances_is_outer = false;
@@ -2692,7 +2857,7 @@ impl DrawText {
             }
 
             if shadow_slug_this_frame && drew_slug_this_frame {
-                cx.redraw_all();
+                redraw_current_text_list(cx);
             }
 
             self.flush_slug_textures_if_allowed(cx);
@@ -2939,7 +3104,7 @@ impl DrawText {
                 } => {
                     self.pending_slug_flush_generation =
                         self.pending_slug_flush_generation.max(generation);
-                    cx.redraw_all();
+                    redraw_current_text_list(cx);
                 }
                 #[cfg(not(any(target_os = "linux", target_os = "windows")))]
                 SlugGlyphCacheResult::NeedsUpload {
@@ -2951,7 +3116,7 @@ impl DrawText {
                     return Some(ResolvedGlyph::Slug(slug_glyph));
                 }
                 SlugGlyphCacheResult::Deferred => {
-                    cx.redraw_all();
+                    redraw_current_text_list(cx);
                 }
                 SlugGlyphCacheResult::Unavailable => {}
             }
@@ -3659,5 +3824,109 @@ mod tests {
 
             assert_eq!(packed, [0.15, 0.25, 0.35, 0.45]);
         });
+    }
+
+    // ---- #2: slug/raster draw-call batching ----
+    //
+    // These tests compare the OLD interleaved batching against the NEW
+    // keep-both-open batching using the pure model in
+    // `plan_glyph_batches{,_interleaved}`. They assert the optimization's two
+    // load-bearing properties:
+    //   1. The new plan opens no more batches than the old (and strictly fewer
+    //      on mixed rows) — that is the draw-call reduction.
+    //   2. The ordered append sequence is byte-for-byte identical — that is the
+    //      visual-equivalence guarantee (z-order is by per-glyph depth, not
+    //      submission order, so reordering appends into two persistent batches
+    //      renders the same pixels).
+    // Platform-independent: the batch-planning model has no GPU/atlas deps, so
+    // it runs natively on every host (incl. macOS CI) — not just the linux/
+    // windows targets where the real slug loop is compiled in.
+    mod glyph_batches {
+        use super::super::{
+            append_sequence, begin_count, plan_glyph_batches, plan_glyph_batches_interleaved,
+            GlyphKind::{Raster, Slug},
+        };
+
+        #[test]
+        fn append_sequence_is_identical_old_vs_new() {
+            // A representative worst case: heavily interleaved raster/slug run.
+            let kinds = [
+                Slug, Raster, Slug, Slug, Raster, Raster, Slug, Raster, Slug, Slug,
+            ];
+            let old = plan_glyph_batches_interleaved(&kinds);
+            let new = plan_glyph_batches(&kinds);
+            assert_eq!(
+                append_sequence(&old),
+                append_sequence(&new),
+                "render order (kind, glyph index) must be preserved"
+            );
+        }
+
+        #[test]
+        fn new_plan_opens_at_most_two_batches() {
+            let kinds = [
+                Slug, Raster, Slug, Slug, Raster, Raster, Slug, Raster, Slug, Slug,
+            ];
+            let new = plan_glyph_batches(&kinds);
+            // Regardless of how many times the kinds alternate, the new plan
+            // opens each of the two shaders (raster, slug) at most once.
+            assert!(begin_count(&new) <= 2);
+        }
+
+        #[test]
+        fn new_plan_reduces_begins_on_interleaved_rows() {
+            // 10 glyphs alternating slug/raster: old opens a batch on every
+            // transition (10), new opens exactly 2 (one raster + one slug).
+            let kinds: Vec<_> = (0..10)
+                .map(|i| if i % 2 == 0 { Slug } else { Raster })
+                .collect();
+            let old = plan_glyph_batches_interleaved(&kinds);
+            let new = plan_glyph_batches(&kinds);
+            assert_eq!(begin_count(&old), 10, "old code fragments every transition");
+            assert_eq!(begin_count(&new), 2, "new code opens each shader once");
+            assert!(begin_count(&new) <= begin_count(&old));
+            // Equivalence still holds on this pattern.
+            assert_eq!(append_sequence(&old), append_sequence(&new));
+        }
+
+        #[test]
+        fn homogeneous_rows_are_a_single_batch_both_ways() {
+            // A row of only-slug (or only-raster) glyphs already needs just one
+            // batch in the old code, so the counts match and nothing regresses.
+            for kind in [Raster, Slug] {
+                let kinds = [kind; 8];
+                let old = plan_glyph_batches_interleaved(&kinds);
+                let new = plan_glyph_batches(&kinds);
+                assert_eq!(begin_count(&old), 1);
+                assert_eq!(begin_count(&new), 1);
+                assert_eq!(append_sequence(&old), append_sequence(&new));
+            }
+        }
+
+        #[test]
+        fn empty_row_produces_no_batches() {
+            let kinds: [super::super::GlyphKind; 0] = [];
+            assert_eq!(begin_count(&plan_glyph_batches(&kinds)), 0);
+            assert_eq!(begin_count(&plan_glyph_batches_interleaved(&kinds)), 0);
+        }
+    }
+
+    // ---- #3: narrowed transitional redraw scope ----
+    mod redraw_scope {
+        use super::super::{redraw_scope_for_text, RedrawScope};
+
+        #[test]
+        fn narrows_to_current_list_when_drawing() {
+            // The transitional call sites all run inside a text's draw, so a
+            // draw list is always on the stack -> local redraw, never full.
+            assert_eq!(redraw_scope_for_text(true), RedrawScope::List);
+        }
+
+        #[test]
+        fn falls_back_to_full_only_without_a_list() {
+            // Only the degenerate "no current list" case keeps the old
+            // window-wide redraw.
+            assert_eq!(redraw_scope_for_text(false), RedrawScope::All);
+        }
     }
 }

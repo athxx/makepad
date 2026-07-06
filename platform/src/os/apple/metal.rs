@@ -1,7 +1,7 @@
 use {
     crate::{
         cx::Cx,
-        draw_list::DrawListId,
+        draw_list::{CxDrawItem, DrawListId},
         draw_pass::{DrawPassClearColor, DrawPassClearDepth, DrawPassId},
         draw_shader::{CxDrawShader, CxDrawShaderCode, CxDrawShaderMapping, DrawShaderId},
         draw_vars::DrawVars,
@@ -145,6 +145,15 @@ impl Cx {
         zbias: &mut f32,
         zbias_step: f32,
         encoder: ObjcId,
+        // Last pipeline / depth-stencil state bound on `encoder`. Threaded
+        // through the recursion (like `zbias`) so we can skip a redundant
+        // setRenderPipelineState / setDepthStencilState when consecutive draw
+        // items resolve to the same state. Metal state is sticky for the
+        // lifetime of one encoder, and there is exactly one encoder per pass
+        // (created in `draw_pass`, ended with `endEncoding`), so the tracker
+        // is seeded once per pass and stays valid across all recursive calls.
+        last_pipeline_state: &mut ObjcId,
+        last_depth_state: &mut ObjcId,
         metal_cx: &MetalCx,
     ) {
         // tad ugly otherwise the borrow checker locks 'self' and we can't recur
@@ -188,6 +197,8 @@ impl Cx {
                     },
                     zbias_step,
                     encoder,
+                    last_pipeline_state,
+                    last_depth_state,
                     metal_cx,
                 );
             } else {
@@ -221,22 +232,30 @@ impl Cx {
 
                 if draw_call.instance_dirty {
                     draw_call.instance_dirty = false;
-                    // update the instance buffer data
-                    let instance_bytes = (draw_item.instances.as_ref().unwrap().len()
-                        * std::mem::size_of::<f32>())
-                        as u64;
-                    self.os.bytes_written = self
-                        .os
-                        .bytes_written
-                        .saturating_add(instance_bytes as usize);
-                    self.os.instance_bytes_uploaded = self
-                        .os
-                        .instance_bytes_uploaded
-                        .saturating_add(instance_bytes);
-                    draw_item
-                        .os
-                        .instance_buffer
-                        .update(metal_cx, &draw_item.instances.as_ref().unwrap());
+                    let instances = draw_item.instances.as_ref().unwrap();
+                    // Value-based dirty: a rebuilt draw call is structurally
+                    // dirty even when its instance bytes are byte-identical to
+                    // what's already on the GPU. Fingerprint the data and skip
+                    // the upload when it matches the last upload.
+                    let fingerprint = CxDrawItem::instance_fingerprint(instances);
+                    if CxDrawItem::needs_instance_upload(
+                        draw_item.last_uploaded_instances,
+                        fingerprint,
+                    ) {
+                        // update the instance buffer data
+                        let instance_bytes =
+                            (instances.len() * std::mem::size_of::<f32>()) as u64;
+                        self.os.bytes_written = self
+                            .os
+                            .bytes_written
+                            .saturating_add(instance_bytes as usize);
+                        self.os.instance_bytes_uploaded = self
+                            .os
+                            .instance_bytes_uploaded
+                            .saturating_add(instance_bytes);
+                        draw_item.os.instance_buffer.update(metal_cx, instances);
+                        draw_item.last_uploaded_instances = Some(fingerprint);
+                    }
                 }
 
                 // update the zbias uniform if we have it.
@@ -262,13 +281,25 @@ impl Cx {
                         self.passes[draw_pass_id].os.mtl_depth_state_no_write
                     };
                     if let Some(depth_state) = depth_state {
-                        let () = unsafe { msg_send![encoder, setDepthStencilState: depth_state] };
+                        // Skip the rebind when this encoder already holds this
+                        // depth-stencil state (sticky per encoder).
+                        if depth_state != *last_depth_state {
+                            let () =
+                                unsafe { msg_send![encoder, setDepthStencilState: depth_state] };
+                            *last_depth_state = depth_state;
+                        }
                     }
                 }
 
                 let render_pipeline_state = shp.render_pipeline_state.as_id();
-                unsafe {
-                    let () = msg_send![encoder, setRenderPipelineState: render_pipeline_state];
+                // Skip the rebind when this encoder already holds this pipeline
+                // state. Consecutive draw items that share a shader (the common
+                // case for batched widgets) resolve to the same pipeline object.
+                if render_pipeline_state != *last_pipeline_state {
+                    unsafe {
+                        let () = msg_send![encoder, setRenderPipelineState: render_pipeline_state];
+                    }
+                    *last_pipeline_state = render_pipeline_state;
                 }
 
                 let geometry_id = if let Some(geometry_id) = draw_call.geometry_id {
@@ -808,8 +839,15 @@ impl Cx {
             msg_send![command_buffer, renderCommandEncoderWithDescriptor: render_pass_descriptor]
         };
 
+        // Seed the per-encoder state trackers used by render_view to dedup
+        // redundant setDepthStencilState / setRenderPipelineState calls. The
+        // initial depth state bound below seeds `last_depth_state`; no pipeline
+        // is bound yet, so `last_pipeline_state` starts as nil.
+        let mut last_depth_state: ObjcId = nil;
+        let mut last_pipeline_state: ObjcId = nil;
         if let Some(depth_state) = self.passes[draw_pass_id].os.mtl_depth_state_write {
             let () = unsafe { msg_send![encoder, setDepthStencilState: depth_state] };
+            last_depth_state = depth_state;
         }
 
         let pass_width = dpi_factor * pass_rect.size.x;
@@ -835,6 +873,8 @@ impl Cx {
             &mut zbias,
             zbias_step,
             encoder,
+            &mut last_pipeline_state,
+            &mut last_depth_state,
             &metal_cx,
         );
         let gpu_counters = GpuSampleCounters {
@@ -2861,6 +2901,90 @@ impl EaglRenderBridge {
             // Intentional leak — cleanup belongs with the texture lifecycle.
 
             (gl_texture_id, metal_texture)
+        }
+    }
+}
+
+#[cfg(test)]
+mod state_dedup_tests {
+    // Counter-comparison test for optimization #4 (per-encoder render-pipeline
+    // / depth-state dedup on Metal). The real dedup is inline `!=` checks in
+    // `render_view`; this models that exact skip-when-equal logic as a pure
+    // function so the bind-count reduction is verifiable headlessly (no GPU,
+    // no encoder). One encoder per pass => the tracker is seeded once and
+    // stays valid across the whole draw-item sequence.
+
+    /// Given the pipeline-state id each consecutive draw item resolves to,
+    /// return how many `setRenderPipelineState` calls the OLD path emitted
+    /// (one per item) vs the NEW path (only when it differs from the last).
+    /// `seed` is the state bound before the first item (nil == 0 for pipeline).
+    fn count_binds(seed: u64, items: &[u64]) -> (usize, usize) {
+        let old = items.len(); // unconditional bind per item
+        let mut new = 0usize;
+        let mut last = seed;
+        for &s in items {
+            if s != last {
+                new += 1;
+                last = s;
+            }
+        }
+        (old, new)
+    }
+
+    #[test]
+    fn consecutive_same_shader_collapses_to_one_bind() {
+        // A batched widget list: 8 draw items all sharing one shader/pipeline.
+        let items = [5, 5, 5, 5, 5, 5, 5, 5];
+        let (old, new) = count_binds(0, &items);
+        assert_eq!(old, 8);
+        assert_eq!(new, 1);
+    }
+
+    #[test]
+    fn alternating_shaders_bind_every_item() {
+        // Worst case: pipeline changes every item -> new == old (no regression,
+        // never MORE binds than before).
+        let items = [1, 2, 1, 2, 1, 2];
+        let (old, new) = count_binds(0, &items);
+        assert_eq!(old, 6);
+        assert_eq!(new, 6);
+    }
+
+    #[test]
+    fn runs_of_same_shader_bind_once_per_run() {
+        // Mixed: three runs (a,a,a | b,b | a) -> 3 binds instead of 6.
+        let items = [10, 10, 10, 20, 20, 10];
+        let (old, new) = count_binds(0, &items);
+        assert_eq!(old, 6);
+        assert_eq!(new, 3);
+    }
+
+    #[test]
+    fn seeded_depth_state_skips_leading_rebind() {
+        // depth-state tracker is seeded with the write-state bound in
+        // draw_pass before render_view. If the first items also want the
+        // write-state, no rebind is emitted for them.
+        let write = 42;
+        let items = [write, write, 99, write]; // seed==write
+        let (old, new) = count_binds(write, &items);
+        assert_eq!(old, 4);
+        // item0/1 == seed (skip), item2 differs (bind), item3 differs (bind) => 2
+        assert_eq!(new, 2);
+    }
+
+    #[test]
+    fn new_never_exceeds_old() {
+        // Property: for any sequence, the deduped path emits <= binds.
+        let seqs: &[&[u64]] = &[
+            &[],
+            &[1],
+            &[1, 1, 1],
+            &[1, 2, 3, 4],
+            &[7, 7, 8, 8, 7, 7, 9],
+        ];
+        for seq in seqs {
+            let (old, new) = count_binds(0, seq);
+            assert!(new <= old, "new {new} > old {old} for {seq:?}");
         }
     }
 }

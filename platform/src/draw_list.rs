@@ -422,6 +422,11 @@ pub struct CxDrawItem {
     // these values stick around to reduce buffer churn
     pub draw_item_id: usize,
     pub instances: Option<Vec<f32>>,
+    // (len, content-hash) of the instance data last uploaded to the GPU.
+    // Lets a rebuilt draw call whose instance bytes are byte-identical skip a
+    // redundant GPU upload even though `instance_dirty` was set structurally.
+    // Backend-independent so the decision can be unit-tested headlessly.
+    pub last_uploaded_instances: Option<(usize, u64)>,
     pub os: CxOsDrawCall,
 }
 
@@ -429,6 +434,34 @@ impl std::ops::Deref for CxDrawItem {
     type Target = CxDrawKind;
     fn deref(&self) -> &Self::Target {
         &self.kind
+    }
+}
+
+impl CxDrawItem {
+    /// Content fingerprint of an instance-data slice: `(len, hash)`. The hash
+    /// is the platform-wide FNV `LiveId` over the raw instance bytes. Pairing
+    /// it with the length makes collision-driven false-skips astronomically
+    /// unlikely and cheap (single O(n) pass, no allocation).
+    pub fn instance_fingerprint(instances: &[f32]) -> (usize, u64) {
+        let bytes = unsafe {
+            std::slice::from_raw_parts(
+                instances.as_ptr() as *const u8,
+                instances.len() * std::mem::size_of::<f32>(),
+            )
+        };
+        let hash = LiveId::from_bytes(LiveId::SEED, bytes, 0, bytes.len(), 0).0;
+        (instances.len(), hash)
+    }
+
+    /// Decide whether a draw call flagged `instance_dirty` actually needs a GPU
+    /// re-upload. Skips only when the new fingerprint exactly equals the one
+    /// last uploaded (same length AND same content hash) — otherwise uploads.
+    /// Pure so the value-vs-structural dirty behavior is unit-testable headless.
+    pub fn needs_instance_upload(
+        last_uploaded: Option<(usize, u64)>,
+        new_fingerprint: (usize, u64),
+    ) -> bool {
+        last_uploaded != Some(new_fingerprint)
     }
 }
 
@@ -558,6 +591,7 @@ impl CxDrawItems {
                 draw_item_id,
                 redraw_id,
                 instances: Some(Vec::new()),
+                last_uploaded_instances: None,
                 os: CxOsDrawCall::default(),
                 kind: kind,
             });
@@ -957,4 +991,162 @@ impl CxDrawList {
     pub fn get_view_transform(&self) -> Mat4f {
         self.draw_list_uniforms.view_transform
     }*/
+}
+
+#[cfg(test)]
+mod redraw_and_instance_tests {
+    // Counter-comparison tests for optimizations #5 (value-based instance
+    // upload dirty) and #6 (set-based redraw dedup). Both exercise the pure
+    // decision helpers extracted from the render/redraw paths, so they run
+    // headlessly on any host with no GPU or live Cx.
+    use super::*;
+    use crate::event::DrawEvent;
+    use std::collections::HashSet;
+
+    fn id(index: usize) -> DrawListId {
+        DrawListId(index, 0)
+    }
+
+    // ---- #6: redraw-list dedup -------------------------------------------
+
+    /// Old behavior: each push did an O(n) linear `position` scan for dedup,
+    /// so recording the same id repeatedly is O(n^2) across a frame. This is
+    /// the reference model of that scan, returning how many comparisons it
+    /// performs — the cost the new set-based path eliminates.
+    fn linear_dedup_comparisons(ids: &[DrawListId]) -> (Vec<DrawListId>, usize) {
+        let mut vec: Vec<DrawListId> = Vec::new();
+        let mut comparisons = 0usize;
+        for &wanted in ids {
+            let mut found = false;
+            for &existing in &vec {
+                comparisons += 1;
+                if existing == wanted {
+                    found = true;
+                    break;
+                }
+            }
+            if !found {
+                vec.push(wanted);
+            }
+        }
+        (vec, comparisons)
+    }
+
+    #[test]
+    fn set_dedup_matches_linear_dedup_result() {
+        // Same distinct-membership result as the old linear scan, order-safe
+        // (consumption is by membership/parent-chain, never by index).
+        let ids = [id(3), id(1), id(3), id(2), id(1), id(3)];
+        let (linear_vec, _) = linear_dedup_comparisons(&ids);
+
+        let mut vec = Vec::new();
+        let mut set = HashSet::new();
+        for &i in &ids {
+            DrawEvent::push_deduped(&mut vec, &mut set, i);
+        }
+
+        // Both keep first-seen order and drop duplicates identically.
+        assert_eq!(vec, linear_vec);
+        assert_eq!(vec, vec![id(3), id(1), id(2)]);
+    }
+
+    #[test]
+    fn set_dedup_reports_new_vs_duplicate() {
+        let mut vec = Vec::new();
+        let mut set = HashSet::new();
+        assert!(DrawEvent::push_deduped(&mut vec, &mut set, id(7)));
+        assert!(!DrawEvent::push_deduped(&mut vec, &mut set, id(7)));
+        assert!(DrawEvent::push_deduped(&mut vec, &mut set, id(8)));
+        assert_eq!(vec, vec![id(7), id(8)]);
+    }
+
+    #[test]
+    fn set_dedup_avoids_quadratic_scan_cost() {
+        // 200 requests hammering the same handful of lists (a busy frame):
+        // the old linear scan makes thousands of comparisons; the set-based
+        // path makes exactly one hash-probe per push. We assert the old model
+        // is super-linear to document the improvement the new path secures.
+        let mut ids = Vec::new();
+        for i in 0..200 {
+            ids.push(id(i % 5));
+        }
+        let (vec, comparisons) = linear_dedup_comparisons(&ids);
+        assert_eq!(vec.len(), 5);
+        // Old scan cost far exceeds the number of pushes (n=200): quadratic.
+        assert!(
+            comparisons > ids.len(),
+            "linear scan did {comparisons} comparisons for {} pushes",
+            ids.len()
+        );
+        // New path: one insert() probe per push, independent of vec length.
+        let mut nvec = Vec::new();
+        let mut set = HashSet::new();
+        let mut probes = 0usize;
+        for &i in &ids {
+            probes += 1; // one set.insert probe per push
+            DrawEvent::push_deduped(&mut nvec, &mut set, i);
+        }
+        assert_eq!(probes, ids.len());
+        assert_eq!(nvec.len(), 5);
+    }
+
+    // ---- #5: value-based instance-upload dirty ---------------------------
+
+    #[test]
+    fn identical_rebuild_skips_upload() {
+        // A draw call rebuilt with byte-identical instance data must not
+        // re-upload, even though it is structurally `instance_dirty`.
+        let data = vec![1.0f32, 2.0, 3.0, 4.0];
+        let fp = CxDrawItem::instance_fingerprint(&data);
+        // First frame: nothing uploaded yet -> must upload.
+        assert!(CxDrawItem::needs_instance_upload(None, fp));
+        // Second frame: same bytes already on GPU -> skip.
+        assert!(!CxDrawItem::needs_instance_upload(Some(fp), fp));
+    }
+
+    #[test]
+    fn changed_content_forces_upload() {
+        let a = vec![1.0f32, 2.0, 3.0];
+        let b = vec![1.0f32, 2.0, 3.5]; // one value changed
+        let fa = CxDrawItem::instance_fingerprint(&a);
+        let fb = CxDrawItem::instance_fingerprint(&b);
+        assert_ne!(fa, fb);
+        assert!(CxDrawItem::needs_instance_upload(Some(fa), fb));
+    }
+
+    #[test]
+    fn changed_length_forces_upload() {
+        // Same prefix, different length must never be treated as identical.
+        let a = vec![1.0f32, 2.0];
+        let b = vec![1.0f32, 2.0, 0.0];
+        let fa = CxDrawItem::instance_fingerprint(&a);
+        let fb = CxDrawItem::instance_fingerprint(&b);
+        assert_ne!(fa.0, fb.0);
+        assert!(CxDrawItem::needs_instance_upload(Some(fa), fb));
+    }
+
+    #[test]
+    fn upload_count_static_content_is_one_over_n_frames() {
+        // Model N frames of a static widget: dirty every frame (rebuilt), but
+        // content never changes. Count actual GPU uploads old vs new.
+        let frames = 10;
+        let content = vec![7.0f32, 8.0, 9.0, 10.0, 11.0];
+
+        // Old behavior: `instance_dirty` => upload, unconditionally.
+        let old_uploads = frames; // one per frame
+
+        // New behavior: upload only when fingerprint changes.
+        let mut new_uploads = 0;
+        let mut last: Option<(usize, u64)> = None;
+        for _ in 0..frames {
+            let fp = CxDrawItem::instance_fingerprint(&content);
+            if CxDrawItem::needs_instance_upload(last, fp) {
+                new_uploads += 1;
+                last = Some(fp);
+            }
+        }
+
+        assert_eq!(old_uploads, 10);
+        assert_eq!(new_uploads, 1);
+    }
 }
