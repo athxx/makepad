@@ -32,16 +32,27 @@ pub fn load_system_font(query: &SystemFontQuery) -> Option<Vec<u8>> {
     // at most one sweep.
     if !query.sample.is_empty() {
         let wanted: Vec<u32> = query.sample.chars().map(|c| c as u32).collect();
-        // Prefer entries closest to the requested weight/style, but any covering
-        // file is acceptable — iterate all families, best style/weight first.
-        let mut entries: Vec<&FontEntry> =
-            families.iter().flat_map(|f| f.fonts.iter()).collect();
-        entries.sort_by_key(|e| {
+        let lang_hint = query.lang.to_ascii_lowercase();
+        let mut entries: Vec<(&FontEntry, &Option<String>)> = families
+            .iter()
+            .flat_map(|f| f.fonts.iter().map(move |e| (e, &f.lang)))
+            .collect();
+        entries.sort_by_key(|(e, lang)| {
+            let lang_lc = lang.as_deref().map(|l| l.to_ascii_lowercase());
+            let lang_rank = match &lang_lc {
+                Some(l) if !lang_hint.is_empty() && l.contains(&lang_hint) => 0,
+                Some(_) => 1,
+                None => 2,
+            };
             let style_penalty = if e.italic == query.italic { 0 } else { 10_000 };
             let weight_penalty = (e.weight as i64 - want_weight as i64).unsigned_abs() as u64;
-            style_penalty as u64 + weight_penalty
+            (lang_rank, style_penalty as u64 + weight_penalty)
         });
-        for entry in entries {
+        let mut tried: std::collections::HashSet<&str> = std::collections::HashSet::new();
+        for (entry, _) in entries {
+            if !tried.insert(entry.file.as_str()) {
+                continue; // several xml entries share one file; read it once.
+            }
             let Some(bytes) = read_font_file(&entry.file) else {
                 continue;
             };
@@ -107,27 +118,52 @@ fn be_u32(d: &[u8], o: usize) -> Option<u32> {
 }
 
 /// True if `font` (a .ttf/.otf or .ttc collection) covers every code point in
-/// `wanted`.
+/// `wanted`. A `.ttc` bundles several fonts that each cover different scripts
+/// (Android's CJK fonts are `.ttc` where e.g. the Japanese and Korean faces
+/// live in separate sub-fonts), so every sub-font's `cmap` is a candidate: the
+/// collection covers a code point if *any* of its faces does.
 fn font_covers_all(font: &[u8], wanted: &[u32]) -> bool {
     if wanted.is_empty() {
         return false;
     }
-    let Some(cmap) = find_cmap_table(font) else {
+    let cmaps = find_cmap_tables(font);
+    if cmaps.is_empty() {
         return false;
-    };
-    wanted.iter().all(|&cp| cmap_covers(font, cmap, cp))
+    }
+    wanted
+        .iter()
+        .all(|&cp| cmaps.iter().any(|&cmap| cmap_covers(font, cmap, cp)))
 }
 
-/// Locate the `cmap` table offset, handling both single fonts (`0x00010000` /
-/// `OTTO`) and TrueType collections (`ttcf`, whose first offset table we use).
-fn find_cmap_table(font: &[u8]) -> Option<usize> {
-    let tag = be_u32(font, 0)?;
-    let sfnt_offset = if tag == 0x7474_6366 {
-        // 'ttcf' — collection header: numFonts at 8, first offset table at 12.
-        be_u32(font, 12)? as usize
-    } else {
-        0
+/// Locate every `cmap` table offset in `font`, handling single fonts
+/// (`0x00010000` / `OTTO`) and TrueType collections (`ttcf`, whose header lists
+/// one offset table per bundled font — we return the `cmap` of each so a `.ttc`
+/// isn't judged solely by its first sub-font).
+fn find_cmap_tables(font: &[u8]) -> Vec<usize> {
+    let mut cmaps = Vec::new();
+    let tag = match be_u32(font, 0) {
+        Some(t) => t,
+        None => return cmaps,
     };
+    if tag == 0x7474_6366 {
+        // 'ttcf' — collection header: numFonts at 8, offset-table array at 12.
+        let num_fonts = be_u32(font, 8).unwrap_or(0) as usize;
+        for i in 0..num_fonts {
+            if let Some(sfnt_offset) = be_u32(font, 12 + i * 4).map(|o| o as usize) {
+                if let Some(cmap) = find_cmap_in_offset_table(font, sfnt_offset) {
+                    cmaps.push(cmap);
+                }
+            }
+        }
+    } else if let Some(cmap) = find_cmap_in_offset_table(font, 0) {
+        cmaps.push(cmap);
+    }
+    cmaps
+}
+
+/// Find the `cmap` table offset within a single sfnt offset table at
+/// `sfnt_offset` (0 for a bare font, or a sub-font offset within a `.ttc`).
+fn find_cmap_in_offset_table(font: &[u8], sfnt_offset: usize) -> Option<usize> {
     let num_tables = be_u16(font, sfnt_offset + 4)? as usize;
     let dir = sfnt_offset + 12;
     for i in 0..num_tables {

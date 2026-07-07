@@ -7,6 +7,7 @@
 
 use super::module_loader::ModuleLoader;
 use crate::cx_api::{SystemFontQuery, SystemFontRole};
+use std::cell::RefCell;
 use std::ffi::{c_void, CString};
 use std::os::raw::{c_char, c_int, c_uchar};
 
@@ -96,14 +97,23 @@ impl LibFontconfig {
     }
 }
 
-/// Resolve `query` to font file bytes using fontconfig, or `None` on failure.
-pub fn load_system_font(query: &SystemFontQuery) -> Option<Vec<u8>> {
-    unsafe { load_system_font_inner(query) }
+thread_local! {
+    static FONTCONFIG: RefCell<Option<Option<LibFontconfig>>> = const { RefCell::new(None) };
 }
 
-unsafe fn load_system_font_inner(query: &SystemFontQuery) -> Option<Vec<u8>> {
-    let fc = LibFontconfig::try_load()?;
+/// Resolve `query` to font file bytes using fontconfig, or `None` on failure.
+pub fn load_system_font(query: &SystemFontQuery) -> Option<Vec<u8>> {
+    FONTCONFIG.with(|cell| {
+        let mut slot = cell.borrow_mut();
+        if slot.is_none() {
+            *slot = Some(unsafe { LibFontconfig::try_load() });
+        }
+        let fc = slot.as_ref().unwrap().as_ref()?;
+        unsafe { load_system_font_inner(fc, query) }
+    })
+}
 
+unsafe fn load_system_font_inner(fc: &LibFontconfig, query: &SystemFontQuery) -> Option<Vec<u8>> {
     let pat = (fc.fc_pattern_create)();
     if pat.is_null() {
         return None;
