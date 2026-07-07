@@ -283,14 +283,6 @@ pub struct BuildResult {
     java_url: String,
 }
 
-const SMALL_FONT_REPLACEMENTS: [(&str, &str); 5] = [
-    ("GoNotoKurrent-Bold.ttf", "IBMPlexSans-SemiBold.ttf"),
-    ("GoNotoKurrent-Regular.ttf", "IBMPlexSans-Text.ttf"),
-    ("LXGWWenKaiBold.ttf", "IBMPlexSans-Text.ttf"),
-    ("LXGWWenKaiRegular.ttf", "IBMPlexSans-Text.ttf"),
-    ("NotoColorEmoji.ttf", "IBMPlexSans-Text.ttf"),
-];
-
 fn main_java(url: &str) -> String {
     format!(
         r#"
@@ -1751,12 +1743,7 @@ fn add_resources(
             .join(format!("assets/makepad/makepad_widgets/resources"));
         let remove = [
             "fa-solid-900.ttf",
-            //"LXGWWenKaiBold.ttf",
             "LiberationMono-Regular.ttf",
-            //"GoNotoKurrent-Bold.ttf",
-            // "NotoColorEmoji.ttf",
-            //"IBMPlexSans-SemiBold.ttf",
-            "NotoSans-Regular.ttf",
         ];
         for remove in remove {
             assets_to_add.retain(|v| !v.contains(remove));
@@ -1801,7 +1788,7 @@ fn add_assets_dir_to_apk(
     crate_name: &str,
     source_dir: &Path,
     asset_subdir: &str,
-    config: &AndroidConfig,
+    _config: &AndroidConfig,
 ) -> Result<(), String> {
     if !source_dir.is_dir() {
         return Ok(());
@@ -1811,15 +1798,6 @@ fn add_assets_dir_to_apk(
     let dst_dir = out_dir.join(format!("assets/makepad/{crate_name}/{asset_subdir}"));
     mkdir(&dst_dir)?;
     cp_android_runtime_assets(source_dir, &dst_dir)?;
-    if config.small_fonts && asset_subdir == "resources" {
-        for (target_name, replacement_name) in SMALL_FONT_REPLACEMENTS {
-            let replacement = source_dir.join(replacement_name);
-            let target = dst_dir.join(target_name);
-            if replacement.is_file() && target.is_file() {
-                cp(&replacement, &target, false)?;
-            }
-        }
-    }
 
     let assets = ls(&dst_dir)?;
     for path in &assets {
@@ -1835,7 +1813,7 @@ fn add_font_assets_dir_to_apk(
     crate_name: &str,
     source_dir: &Path,
     resource_dir: &Path,
-    config: &AndroidConfig,
+    _config: &AndroidConfig,
 ) -> Result<(), String> {
     if !source_dir.is_dir() {
         return Ok(());
@@ -1856,34 +1834,13 @@ fn add_font_assets_dir_to_apk(
             continue;
         }
         // Skip files that already ship from the sibling `resources/` dir —
-        // otherwise the same TTF lands in the APK twice. The widgets crate
-        // for instance keeps LXGWWenKai*.ttf and NotoColorEmoji.ttf in both.
+        // otherwise the same font file lands in the APK twice.
         if resource_dir.join(path).is_file() {
             continue;
         }
         cp(&source_dir.join(path), &dst_dir.join(path), false)?;
         let path = path.display().to_string().replace("\\", "/");
         assets_to_add.push(format!("assets/makepad/{crate_name}/fonts/{path}"));
-    }
-    if config.small_fonts {
-        for (target_name, replacement_name) in SMALL_FONT_REPLACEMENTS {
-            let replacement = source_dir
-                .join(replacement_name)
-                .is_file()
-                .then(|| source_dir.join(replacement_name))
-                .or_else(|| {
-                    resource_dir
-                        .join(replacement_name)
-                        .is_file()
-                        .then(|| resource_dir.join(replacement_name))
-                });
-            let target = dst_dir.join(target_name);
-            if let Some(replacement) = replacement {
-                if target.is_file() {
-                    cp(&replacement, &target, false)?;
-                }
-            }
-        }
     }
     Ok(())
 }
@@ -1999,7 +1956,7 @@ fn stage_makepad_assets_subdir(
     crate_name: &str,
     source_dir: &Path,
     asset_subdir: &str,
-    config: &AndroidConfig,
+    _config: &AndroidConfig,
 ) -> Result<(), String> {
     if !source_dir.is_dir() {
         return Ok(());
@@ -2008,15 +1965,6 @@ fn stage_makepad_assets_subdir(
     let dst_dir = assets_root.join(format!("makepad/{crate_name}/{asset_subdir}"));
     mkdir(&dst_dir)?;
     cp_android_runtime_assets(source_dir, &dst_dir)?;
-    if config.small_fonts && asset_subdir == "resources" {
-        for (target_name, replacement_name) in SMALL_FONT_REPLACEMENTS {
-            let replacement = source_dir.join(replacement_name);
-            let target = dst_dir.join(target_name);
-            if replacement.is_file() && target.is_file() {
-                cp(&replacement, &target, false)?;
-            }
-        }
-    }
     Ok(())
 }
 
@@ -2026,7 +1974,7 @@ fn stage_makepad_font_subdir(
     crate_name: &str,
     source_dir: &Path,
     resource_dir: &Path,
-    config: &AndroidConfig,
+    _config: &AndroidConfig,
 ) -> Result<(), String> {
     if !source_dir.is_dir() {
         return Ok(());
@@ -2049,26 +1997,6 @@ fn stage_makepad_font_subdir(
             continue;
         }
         cp(&source_dir.join(path), &dst_dir.join(path), false)?;
-    }
-    if config.small_fonts {
-        for (target_name, replacement_name) in SMALL_FONT_REPLACEMENTS {
-            let replacement = source_dir
-                .join(replacement_name)
-                .is_file()
-                .then(|| source_dir.join(replacement_name))
-                .or_else(|| {
-                    resource_dir
-                        .join(replacement_name)
-                        .is_file()
-                        .then(|| resource_dir.join(replacement_name))
-                });
-            let target = dst_dir.join(target_name);
-            if let Some(replacement) = replacement {
-                if target.is_file() {
-                    cp(&replacement, &target, false)?;
-                }
-            }
-        }
     }
     Ok(())
 }
@@ -2117,11 +2045,7 @@ fn stage_aab_assets(
 
     if let AndroidVariant::Quest = variant {
         let dst_dir = assets_root.join("makepad/makepad_widgets/resources");
-        let remove = [
-            "fa-solid-900.ttf",
-            "LiberationMono-Regular.ttf",
-            "NotoSans-Regular.ttf",
-        ];
+        let remove = ["fa-solid-900.ttf", "LiberationMono-Regular.ttf"];
         for r in remove {
             let _ = rm(&dst_dir.join(r));
         }

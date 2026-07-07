@@ -35,6 +35,7 @@ workspace.members = [
     "examples/text_input",
     "examples/text_selection",
     "examples/counter",
+    "examples/web_font",
     "examples/browser",
     "examples/camera",
     "examples/windows_blur",
@@ -46,6 +47,8 @@ workspace.members = [
     "examples/cad",
     "examples/box3d",
     "examples/hello_world",
+    # === fonts ===
+    "libs/woff2",
     # === xr app ===
     "xr",
     # === studio ===

@@ -42,6 +42,7 @@ pub mod vulkan_naga;
 pub mod dma_buf;
 #[cfg(not(any(target_env = "ohos", target_os = "android")))]
 pub mod gst_gl_share;
+pub mod fontconfig_sys;
 #[cfg(not(any(target_env = "ohos", target_os = "android")))]
 pub mod gstreamer_sys;
 #[cfg(not(any(target_env = "ohos", target_os = "android")))]
