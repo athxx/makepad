@@ -19,6 +19,7 @@ pub mod apple_classes;
 pub mod apple_game_input;
 #[cfg(any(target_os = "macos", target_os = "ios"))]
 pub mod apple_geo;
+pub mod apple_system_fonts;
 pub mod apple_media;
 #[cfg(any(target_os = "macos", target_os = "ios"))]
 pub mod apple_video_playback;

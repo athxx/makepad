@@ -67,6 +67,7 @@ workspace.members = [
     "examples/text_selection",
     "examples/text_center",
     "examples/counter",
+    "examples/web_font",
     "examples/browser",
     "examples/camera",
     "examples/windows_blur",
@@ -82,6 +83,8 @@ workspace.members = [
     "examples/render_to_texture",
     # === digital-fabrication product ===
     "apps/fab",
+    # === fonts ===
+    "libs/woff2",
     # === xr app ===
     "xr",
     # === studio ===
