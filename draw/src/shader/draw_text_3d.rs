@@ -29,9 +29,9 @@ pub struct DrawText3d {
     pub billboard_offset: Vec2f,
     #[rust(true)]
     pub billboard_flag: bool,
-    #[rust(10.0)]
+    #[rust(10.0_f32)]
     pub billboard_flag_spacing: f32,
-    #[rust(0.0)]
+    #[rust(0.0_f32)]
     pub text_rotation: f32,
     #[deref]
     pub draw_super: DrawRotatedText,

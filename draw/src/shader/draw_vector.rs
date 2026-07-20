@@ -316,9 +316,9 @@ pub struct DrawVector {
     pub rect_size: Vec2f,
     #[live]
     pub draw_clip: Vec4f,
-    #[live(1.0)]
+    #[live(1.0_f32)]
     pub depth_clip: f32,
-    #[live(0.0)]
+    #[live(0.0_f32)]
     pub draw_depth: f32,
     #[live]
     pub pad1: f32,

@@ -57,7 +57,7 @@ pub struct MathView {
     text: String,
     #[live]
     color: Vec4,
-    #[live(11.0)]
+    #[live(11.0_f64)]
     font_size: f64,
     #[live(-2.0)]
     baseline_offset: f64,

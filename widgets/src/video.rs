@@ -392,7 +392,7 @@ pub struct Video {
     // Controls config
     #[live(true)]
     show_controls: bool,
-    #[live(32.0)]
+    #[live(32.0_f64)]
     controls_height: f64,
     // Animator for hover fade
     #[apply_default]

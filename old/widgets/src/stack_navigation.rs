@@ -164,7 +164,7 @@ pub struct StackNavigationView {
     full_screen: bool,
 
     /// The offset of the stack view from the left edge of the parent view when it is fully hidden.
-    #[rust(10000.0)]
+    #[rust(10000.0_f64)]
     offset_to_hide: f64,
 
     #[animator]

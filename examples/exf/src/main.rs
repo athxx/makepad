@@ -1080,17 +1080,17 @@ pub struct ExfViewport {
     light_lift: f32,
     #[rust(0)]
     debug_view: i32,
-    #[rust(1.0)]
+    #[rust(1.0_f32)]
     zoom: f32,
-    #[rust(0.0)]
+    #[rust(0.0_f32)]
     max_mip_level: f32,
     #[rust(vec2(0.0, 0.0))]
     pan: Vec2f,
     #[rust(vec2(1.0, 1.0))]
     image_size: Vec2f,
-    #[rust(0.0)]
+    #[rust(0.0_f32)]
     depth_min: f32,
-    #[rust(1.0)]
+    #[rust(1.0_f32)]
     depth_inv_range: f32,
     #[rust(vec3(0.0, 0.0, 0.0))]
     camera_mid: Vec3f,
@@ -1100,9 +1100,9 @@ pub struct ExfViewport {
     camera_up_step: Vec3f,
     #[rust(vec3(0.0, 0.0, 1.0))]
     camera_forward_dir: Vec3f,
-    #[rust(45.0)]
+    #[rust(45.0_f32)]
     camera_fov_y: f32,
-    #[rust(0.0)]
+    #[rust(0.0_f32)]
     camera_z_start_delta: f32,
     #[rust]
     textures: Vec<Texture>,

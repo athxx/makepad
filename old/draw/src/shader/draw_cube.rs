@@ -63,7 +63,7 @@ pub struct DrawCube {
     pub cube_size: Vec3f,
     #[live(vec3(0., 0., 0.))]
     pub cube_pos: Vec3f,
-    #[live(1.0)]
+    #[live(1.0_f32)]
     pub depth_clip: f32,
 }
 

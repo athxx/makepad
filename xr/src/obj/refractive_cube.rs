@@ -44,15 +44,15 @@ pub struct RefractiveCube {
     size: Vec3f,
     #[live(vec4(0.80, 0.92, 1.0, 0.18))]
     color: Vec4f,
-    #[live(0.024)]
+    #[live(0.024_f32)]
     corner_radius: f32,
-    #[live(0.04)]
+    #[live(0.04_f32)]
     roughness: f32,
-    #[live(0.6)]
+    #[live(0.6_f32)]
     spec_strength: f32,
-    #[live(1.2)]
+    #[live(1.2_f32)]
     env_intensity: f32,
-    #[live(1.8)]
+    #[live(1.8_f32)]
     focus_distance: f32,
     #[cast]
     #[deref]

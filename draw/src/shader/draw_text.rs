@@ -1282,9 +1282,9 @@ pub struct DrawText {
     slug_layout_pad: u64,
     #[live]
     pub text_style: TextStyle,
-    #[live(1.0)]
+    #[live(1.0_f32)]
     pub font_scale: f32,
-    #[live(0.0)]
+    #[live(0.0_f32)]
     pub draw_depth: f32,
     #[live]
     pub debug: bool,
@@ -1325,7 +1325,7 @@ pub struct DrawText {
     pub rect_size: Vec2f,
     #[live]
     pub draw_clip: Vec4f,
-    #[live(1.0)]
+    #[live(1.0_f32)]
     pub depth_clip: f32,
     #[live]
     pub glyph_depth: f32,
@@ -1335,9 +1335,9 @@ pub struct DrawText {
     pub char_index: f32,
     #[live(vec4(1., 1., 1., 1.))]
     pub color: Vec4f,
-    #[live(1.0)]
+    #[live(1.0_f32)]
     pub sdf_sharpness: f32,
-    #[live(0.03)]
+    #[live(0.03_f32)]
     pub sdf_luma_bias: f32,
     #[live]
     pub t_min: Vec2f,
@@ -1347,13 +1347,13 @@ pub struct DrawText {
     pub atlas_plane: f32,
     #[live]
     pub pad1: f32,
-    #[live(0.0)]
+    #[live(0.0_f32)]
     pub aa_2x2: f32,
-    #[live(0.0)]
+    #[live(0.0_f32)]
     pub aa_4x4: f32,
-    #[live(0.2)]
+    #[live(0.2_f32)]
     pub stem_darken: f32,
-    #[live(0.125)]
+    #[live(0.125_f32)]
     pub stem_darken_max: f32,
 }
 
@@ -1371,7 +1371,7 @@ struct DrawTextSlug {
     rect_size: Vec2f,
     #[live]
     draw_clip: Vec4f,
-    #[live(1.0)]
+    #[live(1.0_f32)]
     depth_clip: f32,
     #[live]
     glyph_depth: f32,
@@ -1381,9 +1381,9 @@ struct DrawTextSlug {
     char_index: f32,
     #[live(vec4(1., 1., 1., 1.))]
     color: Vec4f,
-    #[live(1.0)]
+    #[live(1.0_f32)]
     sdf_sharpness: f32,
-    #[live(0.03)]
+    #[live(0.03_f32)]
     sdf_luma_bias: f32,
     #[live]
     t_min: Vec2f,
@@ -1393,13 +1393,13 @@ struct DrawTextSlug {
     atlas_plane: f32,
     #[live]
     pad1: f32,
-    #[live(0.0)]
+    #[live(0.0_f32)]
     aa_2x2: f32,
-    #[live(0.0)]
+    #[live(0.0_f32)]
     aa_4x4: f32,
-    #[live(0.2)]
+    #[live(0.2_f32)]
     stem_darken: f32,
-    #[live(0.125)]
+    #[live(0.125_f32)]
     stem_darken_max: f32,
 }
 
@@ -3187,14 +3187,14 @@ fn mat4_row(mat: &Mat4f, row: usize) -> [f32; 4] {
 pub struct TextStyle {
     #[live]
     pub font_family: FontFamily,
-    #[live(10.0)]
+    #[live(10.0_f32)]
     pub font_size: f32,
-    #[live(1.0)]
+    #[live(1.0_f32)]
     pub line_spacing: f32,
     /// A vertical offset applied when drawing text, as a fraction of the font size.
     /// Positive values shift text downward, useful for aligning baselines when
     /// mixing fonts with different vertical metrics (e.g., code font with regular text).
-    #[live(0.0)]
+    #[live(0.0_f32)]
     pub top_drop: f32,
 }
 
@@ -3207,7 +3207,7 @@ pub struct FontMember {
     #[live]
     pub desc: f32,
     /// Positive values map to the OpenType `wght` axis. `0.0` keeps the font default.
-    #[live(0.0)]
+    #[live(0.0_f32)]
     pub weight: f32,
 }
 

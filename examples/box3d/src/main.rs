@@ -173,7 +173,7 @@ pub struct DrawPhysMesh {
     transform: Mat4f,
     #[live(vec3(1.0, 1.0, 1.0))]
     scale: Vec3f,
-    #[live(1.0)]
+    #[live(1.0_f32)]
     depth_clip: f32,
 }
 

@@ -359,7 +359,7 @@ pub struct VectorStop {
     pub offset: f32,
     #[live]
     pub color: ScriptValue,
-    #[live(1.0)]
+    #[live(1.0_f32)]
     pub opacity: f32,
 }
 
@@ -468,7 +468,7 @@ pub struct VectorDropShadow {
     pub blur: f32,
     #[live]
     pub color: ScriptValue,
-    #[live(1.0)]
+    #[live(1.0_f32)]
     pub opacity: f32,
 }
 
@@ -1317,7 +1317,7 @@ pub struct VectorGradient {
     pub y1: f32,
     #[live]
     pub x2: f32,
-    #[live(1.0)]
+    #[live(1.0_f32)]
     pub y2: f32,
     #[live]
     pub units: ScriptValue,
@@ -1372,11 +1372,11 @@ impl VectorGradient {
 pub struct VectorRadGradient {
     #[source]
     source: ScriptObjectRef,
-    #[live(0.5)]
+    #[live(0.5_f32)]
     pub cx: f32,
-    #[live(0.5)]
+    #[live(0.5_f32)]
     pub cy: f32,
-    #[live(0.5)]
+    #[live(0.5_f32)]
     pub r: f32,
     #[live]
     pub fx: f32,

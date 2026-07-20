@@ -54,17 +54,17 @@ live_design! {
 pub struct DrawBullet {
     #[deref]
     pub draw_super: DrawCube,
-    #[live(0.0)]
+    #[live(0.0_f32)]
     pub life: f32,
-    #[live(0.0)]
+    #[live(0.0_f32)]
     pub index: f32,
-    #[live(0.0)]
+    #[live(0.0_f32)]
     pub angle: f32,
-    #[live(0.0)]
+    #[live(0.0_f32)]
     pub angle_velo: f32,
-    #[live(0.0)]
+    #[live(0.0_f32)]
     pub pos_velo: f32,
-    #[live(0.0)]
+    #[live(0.0_f32)]
     pub tap_count: f32,
 }
 
@@ -199,7 +199,7 @@ pub struct XrLasers {
     peers: Vec<XrPeer>,
     #[rust]
     bullets: Bullets,
-    #[rust(1.0)]
+    #[rust(1.0_f32)]
     tap_count: f32,
 }
 

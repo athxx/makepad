@@ -1811,7 +1811,7 @@ pub struct GlassSlider {
 
     #[rust]
     draw_list: Option<DrawList2d>,
-    #[live(0.4)]
+    #[live(0.4_f32)]
     pub value: f32,
     #[rust]
     hover: f32,

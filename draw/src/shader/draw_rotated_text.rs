@@ -78,9 +78,9 @@ script_mod! {
 pub struct DrawRotatedText {
     #[deref]
     pub draw_super: DrawText,
-    #[live(0.0)]
+    #[live(0.0_f32)]
     pub rotation: f32,
-    #[live(1.0)]
+    #[live(1.0_f32)]
     pub label_scale: f32,
     #[live(vec2(0.0, 0.0))]
     pub rotation_origin: Vec2f,

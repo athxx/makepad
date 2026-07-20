@@ -111,16 +111,16 @@ pub struct PortalList2 {
     #[rust(0usize)]
     visible_items: usize,
 
-    #[live(0.2)]
+    #[live(0.2_f64)]
     flick_scroll_minimum: f64,
-    #[live(80.0)]
+    #[live(80.0_f64)]
     flick_scroll_maximum: f64,
-    #[live(0.005)]
+    #[live(0.005_f64)]
     flick_scroll_scaling: f64,
-    #[live(0.98)]
+    #[live(0.98_f64)]
     flick_scroll_decay: f64,
 
-    #[live(100.0)]
+    #[live(100.0_f64)]
     max_pull_down: f64,
 
     #[live(false)]

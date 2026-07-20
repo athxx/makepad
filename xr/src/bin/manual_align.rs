@@ -397,7 +397,7 @@ pub struct ManualAlignPreview {
     preview_bounds: Option<PreviewBounds>,
     #[rust]
     band_pass: HeightBandPass,
-    #[rust(1.18)]
+    #[rust(1.18_f32)]
     zoom: f32,
 }
 

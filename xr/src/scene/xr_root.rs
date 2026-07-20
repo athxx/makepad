@@ -58,25 +58,25 @@ script_mod! {
 
 #[derive(Script, ScriptHook, Clone)]
 pub struct XrCamera {
-    #[live(28.0)]
+    #[live(28.0_f32)]
     pub fov_y: f32,
     #[live(vec3(0.0, -0.10, -1.30))]
     pub desktop_target: Vec3f,
-    #[live(3.4)]
+    #[live(3.4_f32)]
     pub distance: f32,
-    #[live(0.05)]
+    #[live(0.05_f32)]
     pub near: f32,
-    #[live(200.0)]
+    #[live(200.0_f32)]
     pub far: f32,
-    #[live(0.25)]
+    #[live(0.25_f32)]
     pub distance_min: f32,
-    #[live(30.0)]
+    #[live(30.0_f32)]
     pub distance_max: f32,
-    #[live(0.08)]
+    #[live(0.08_f32)]
     pub wheel_zoom_step: f32,
-    #[rust(0.0)]
+    #[rust(0.0_f32)]
     pub orbit_yaw: f32,
-    #[rust(0.0)]
+    #[rust(0.0_f32)]
     pub orbit_pitch: f32,
     #[rust]
     pub orbit_last_abs: Option<DVec2>,

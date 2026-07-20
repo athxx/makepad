@@ -988,7 +988,7 @@ pub struct PdfView {
     source: ScriptObjectRef,
     #[deref]
     view: View,
-    #[live(1.0)]
+    #[live(1.0_f64)]
     zoom: f64,
     #[rust]
     page_cache: Vec<Rc<CachedPage>>,

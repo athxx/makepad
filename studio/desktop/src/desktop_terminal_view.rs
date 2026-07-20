@@ -147,19 +147,19 @@ pub struct DesktopTerminalView {
     draw_cursor: DrawTerminalCursor,
     #[live]
     draw_cell_bg: DrawTerminalCellBg,
-    #[live(9.0)]
+    #[live(9.0_f64)]
     font_size: f64,
-    #[live(0.6)]
+    #[live(0.6_f64)]
     cell_width_factor: f64,
-    #[live(1.4)]
+    #[live(1.4_f64)]
     cell_height_factor: f64,
-    #[live(4.0)]
+    #[live(4.0_f64)]
     pad_x: f64,
-    #[live(2.0)]
+    #[live(2.0_f64)]
     pad_y: f64,
-    #[live(0.0)]
+    #[live(0.0_f64)]
     text_y_offset: f64,
-    #[live(0.0)]
+    #[live(0.0_f64)]
     cursor_y_offset: f64,
     #[rust]
     area: Area,

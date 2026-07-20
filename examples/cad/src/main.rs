@@ -1033,7 +1033,7 @@ pub struct DrawCadMesh {
     color: Vec4f,
     #[live]
     transform: Mat4f,
-    #[live(1.0)]
+    #[live(1.0_f32)]
     depth_clip: f32,
 }
 

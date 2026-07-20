@@ -1201,7 +1201,7 @@ pub struct KeyFrame {
     #[live(Ease::Linear)]
     pub ease: Ease,
 
-    #[live(1.0)]
+    #[live(1.0_f64)]
     pub time: f64,
 
     #[live(NIL)]

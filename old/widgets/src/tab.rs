@@ -322,7 +322,7 @@ pub struct Tab {
     #[live]
     active: f32,
 
-    #[live(10.0)]
+    #[live(10.0_f64)]
     min_drag_dist: f64,
 
     #[walk]

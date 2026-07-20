@@ -56,11 +56,11 @@ pub struct PerfGraph {
     /// The plotted panel corner-pins bottom-right inside the widget's walk
     /// rect — self-positioned so it works under Overlay flow without an
     /// aligning parent (deferred alignment would displace the vector layer).
-    #[live(330.0)]
+    #[live(330.0_f64)]
     panel_width: f64,
-    #[live(150.0)]
+    #[live(150.0_f64)]
     panel_height: f64,
-    #[live(10.0)]
+    #[live(10.0_f64)]
     panel_margin: f64,
     #[rust]
     next_frame: NextFrame,

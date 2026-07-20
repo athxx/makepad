@@ -42,7 +42,7 @@ pub struct DrawSvgGlyph {
     pub cached_shape: Option<GlyphShapeId>,
     #[live(true)]
     pub preserve_aspect: bool,
-    #[live(1.0)]
+    #[live(1.0_f64)]
     pub scale: f64,
     #[deref]
     pub draw_super: DrawGlyph,

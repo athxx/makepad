@@ -26,9 +26,9 @@ script_mod! {
 
 #[derive(Script, Widget)]
 pub struct Shooter {
-    #[live(4.0)]
+    #[live(4.0_f32)]
     projectile_emit_rate_hz: f32,
-    #[live(10.0)]
+    #[live(10.0_f32)]
     projectile_emit_speed_mps: f32,
     #[rust]
     projectile_pool_uids: Vec<WidgetUid>,

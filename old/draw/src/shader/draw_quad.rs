@@ -77,9 +77,9 @@ pub struct DrawQuad {
     pub rect_size: Vec2f,
     #[calc]
     pub draw_clip: Vec4f,
-    #[live(1.0)]
+    #[live(1.0_f32)]
     pub depth_clip: f32,
-    #[live(1.0)]
+    #[live(1.0_f32)]
     pub draw_depth: f32,
 }
 

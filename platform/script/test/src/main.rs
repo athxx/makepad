@@ -16,7 +16,7 @@ pub fn main() {
 
     #[derive(Script)]
     pub struct StructTest {
-        #[live(1.0)]
+        #[live(1.0_f64)]
         field: f64,
         #[live(EnumTest::Bare)]
         enm: EnumTest,

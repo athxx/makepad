@@ -35,7 +35,7 @@ pub struct RubberView {
     layout: Layout,
 
     /// Smoothing factor (0-1, higher = faster animation)
-    #[live(0.5)]
+    #[live(0.5_f32)]
     pub smoothing: f32,
 
     /// Current animated height

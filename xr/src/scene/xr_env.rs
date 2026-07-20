@@ -423,9 +423,9 @@ pub struct XrEnv {
     world: XrWorld,
 
     // Physics (moved from XrScene)
-    #[live(9.81)]
+    #[live(9.81_f32)]
     pub gravity: f32,
-    #[rust(0.25)]
+    #[rust(0.25_f32)]
     physics_time_scale: f32,
     #[allow(dead_code)]
     #[rust]
@@ -1265,11 +1265,11 @@ pub struct DrawDepthMeshBasic {
     pub draw_vars: DrawVars,
     #[live]
     pub base_color: Vec4f,
-    #[live(0.006)]
+    #[live(0.006_f32)]
     pub depth_bias: f32,
-    #[live(2.4)]
+    #[live(2.4_f32)]
     pub wire_outer_px: f32,
-    #[live(0.7)]
+    #[live(0.7_f32)]
     pub wire_inner_px: f32,
 }
 

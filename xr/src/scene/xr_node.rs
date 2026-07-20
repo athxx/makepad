@@ -257,13 +257,13 @@ pub struct XrNode {
     implicit_physics_size: Vec3f,
     #[rust]
     physics_size_explicit: bool,
-    #[live(1.0)]
+    #[live(1.0_f32)]
     density: f32,
-    #[live(0.8)]
+    #[live(0.8_f32)]
     friction: f32,
-    #[live(0.0)]
+    #[live(0.0_f32)]
     restitution: f32,
-    #[live(1.0)]
+    #[live(1.0_f32)]
     gravity_scale: f32,
     #[rust]
     script_async: ScriptAsyncCalls,

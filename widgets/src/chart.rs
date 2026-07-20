@@ -368,11 +368,11 @@ pub struct ChartView {
     pub low_line_color: Vec4f,
     #[live]
     pub bg_color: Vec4f,
-    #[live(0.7)]
+    #[live(0.7_f32)]
     pub candle_width_fraction: f32,
     #[live]
     pub line_color: Vec4f,
-    #[live(2.0)]
+    #[live(2.0_f32)]
     pub line_width: f32,
     #[live]
     pub fill_color: Vec4f,
@@ -380,9 +380,9 @@ pub struct ChartView {
     pub bar_color: Vec4f,
     #[live]
     pub dot_color: Vec4f,
-    #[live(4.0)]
+    #[live(4.0_f32)]
     pub dot_radius: f32,
-    #[live(0.7)]
+    #[live(0.7_f32)]
     pub bar_width_fraction: f32,
 
     #[live]

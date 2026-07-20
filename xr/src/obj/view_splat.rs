@@ -298,23 +298,23 @@ pub struct DrawSplatPbr {
     pub focal_pixels: Vec2f,
     #[live(vec2(0.001953125, 0.0026041667))]
     pub ndc_per_pixel: Vec2f,
-    #[live(2.0)]
+    #[live(2.0_f32)]
     pub coarse_cull_guard: f32,
-    #[live(0.0)]
+    #[live(0.0_f32)]
     pub fast_project_mode: f32,
-    #[live(2.8)]
+    #[live(2.8_f32)]
     pub splat_std_dev: f32,
-    #[live(0.0)]
+    #[live(0.0_f32)]
     pub min_pixel_radius: f32,
-    #[live(512.0)]
+    #[live(512.0_f32)]
     pub max_pixel_radius: f32,
-    #[live(0.3)]
+    #[live(0.3_f32)]
     pub blur_pixels: f32,
-    #[live(0.002)]
+    #[live(0.002_f32)]
     pub alpha_cutoff: f32,
-    #[live(0.0)]
+    #[live(0.0_f32)]
     pub dither_depth_cutout: f32,
-    #[live(1.0)]
+    #[live(1.0_f32)]
     pub dither_scale: f32,
 }
 
@@ -347,13 +347,13 @@ pub struct ViewSplat {
 
     #[live(0u32)]
     max_splats: u32,
-    #[live(1.1)]
+    #[live(1.1_f32)]
     radius_scale: f32,
-    #[live(0.0015)]
+    #[live(0.0015_f32)]
     min_radius: f32,
-    #[live(2.2)]
+    #[live(2.2_f32)]
     normalize_fit: f32,
-    #[live(1.0)]
+    #[live(1.0_f32)]
     opacity_scale: f32,
     #[live(true)]
     auto_normalize: bool,
@@ -361,9 +361,9 @@ pub struct ViewSplat {
     auto_antialias_blur: bool,
     #[live(true)]
     sort_back_to_front: bool,
-    #[live(0.25)]
+    #[live(0.25_f32)]
     sort_min_camera_angle_deg: f32,
-    #[live(0.02)]
+    #[live(0.02_f32)]
     sort_min_camera_move: f32,
 
     #[rust]
@@ -380,7 +380,7 @@ pub struct ViewSplat {
     base_indices_applied: bool,
     #[rust(vec3(0.0, 0.0, 0.0))]
     scene_center: Vec3f,
-    #[rust(1.0)]
+    #[rust(1.0_f32)]
     scene_unit_scale: f32,
     #[rust]
     depth_sort_request_tx: FromUISender<SplatSortRequest>,

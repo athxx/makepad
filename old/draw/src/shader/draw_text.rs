@@ -98,9 +98,9 @@ pub struct DrawText {
     pub geometry: GeometryQuad2D,
     #[live]
     pub text_style: TextStyle,
-    #[live(1.0)]
+    #[live(1.0_f32)]
     pub font_scale: f32,
-    #[live(1.0)]
+    #[live(1.0_f32)]
     pub draw_depth: f32,
     #[live]
     pub debug: bool,
@@ -116,7 +116,7 @@ pub struct DrawText {
     pub rect_size: Vec2f,
     #[calc]
     pub draw_clip: Vec4f,
-    #[live(1.0)]
+    #[live(1.0_f32)]
     pub depth_clip: f32,
     #[calc]
     pub glyph_depth: f32,
@@ -555,9 +555,9 @@ impl DrawText {
 pub struct TextStyle {
     #[live]
     pub font_family: FontFamily,
-    #[live(10.0)]
+    #[live(10.0_f32)]
     pub font_size: f32,
-    #[live(1.0)]
+    #[live(1.0_f32)]
     pub line_spacing: f32,
 }
 

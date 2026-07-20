@@ -220,7 +220,7 @@ pub struct CodeEditor {
     line_start: usize,
     #[rust]
     line_end: usize,
-    #[rust(1.0)]
+    #[rust(1.0_f64)]
     pub height_scale: f64,
     #[live(true)]
     word_wrap: bool,
@@ -233,7 +233,7 @@ pub struct CodeEditor {
     #[live(true)]
     empty_page_at_end: bool,
 
-    #[live(0.5)]
+    #[live(0.5_f64)]
     blink_speed: f64,
 
     #[apply_default]

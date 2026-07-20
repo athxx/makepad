@@ -581,9 +581,9 @@ pub struct DrawGlyph {
     pub rect_size: Vec2f,
     #[live]
     pub draw_clip: Vec4f,
-    #[live(0.0)]
+    #[live(0.0_f32)]
     pub draw_depth: f32,
-    #[live(1.0)]
+    #[live(1.0_f32)]
     pub depth_clip: f32,
     #[live(vec4(1., 1., 1., 1.))]
     pub color: Vec4f,
@@ -597,19 +597,19 @@ pub struct DrawGlyph {
     pub band_count: f32,
     #[live]
     pub layer_order: f32,
-    #[live(512.0)]
+    #[live(512.0_f32)]
     pub max_band_curves: f32,
-    #[live(0.0)]
+    #[live(0.0_f32)]
     pub aa_2x2: f32,
-    #[live(0.0)]
+    #[live(0.0_f32)]
     pub aa_4x4: f32,
-    #[live(0.0)]
+    #[live(0.0_f32)]
     pub axis_relief: f32,
-    #[live(0.0)]
+    #[live(0.0_f32)]
     pub stem_darken: f32,
-    #[live(0.125)]
+    #[live(0.125_f32)]
     pub stem_darken_max: f32,
-    #[live(0.0)]
+    #[live(0.0_f32)]
     pub fill_flags: f32,
 }
 

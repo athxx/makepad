@@ -48,13 +48,13 @@ impl GeometryFields for GeometryQuad2D {
 pub struct GeometryQuad2D {
     #[rust]
     pub geometry_ref: Option<GeometryRef>,
-    #[live(0.0)]
+    #[live(0.0_f32)]
     pub x1: f32,
-    #[live(0.0)]
+    #[live(0.0_f32)]
     pub y1: f32,
-    #[live(1.0)]
+    #[live(1.0_f32)]
     pub x2: f32,
-    #[live(1.0)]
+    #[live(1.0_f32)]
     pub y2: f32,
 }
 
@@ -119,11 +119,11 @@ impl GeometryFields for GeometryCube3D {
 pub struct GeometryCube3D {
     #[rust]
     pub geometry_ref: Option<GeometryRef>,
-    #[live(1.0)]
+    #[live(1.0_f32)]
     width: f32,
-    #[live(1.0)]
+    #[live(1.0_f32)]
     height: f32,
-    #[live(1.0)]
+    #[live(1.0_f32)]
     depth: f32,
     #[live(1usize)]
     width_segments: usize,

@@ -558,7 +558,7 @@ pub struct TextInput {
     empty_text: String,
     #[live]
     text: String,
-    #[live(0.5)]
+    #[live(0.5_f64)]
     blink_speed: f64,
 
     #[rust]

@@ -137,7 +137,7 @@ pub struct Image {
     min_width: u64,
     #[live]
     min_height: u64,
-    #[live(1.0)]
+    #[live(1.0_f64)]
     width_scale: f64,
     #[live(ImageAnimation::BounceFps(25.0))]
     animation: ImageAnimation,

@@ -881,45 +881,45 @@ pub struct DrawPbr {
     pub cur_color: Vec4f,
     #[rust(vec4(1.0, 1.0, 1.0, 1.0))]
     pub base_color_factor: Vec4f,
-    #[rust(1.0)]
+    #[rust(1.0_f32)]
     pub metallic_factor: f32,
-    #[rust(1.0)]
+    #[rust(1.0_f32)]
     pub roughness_factor: f32,
     #[rust(vec3(0.0, 0.0, 0.0))]
     pub emissive_factor: Vec3f,
-    #[rust(1.0)]
+    #[rust(1.0_f32)]
     pub normal_scale: f32,
-    #[rust(1.0)]
+    #[rust(1.0_f32)]
     pub occlusion_strength: f32,
-    #[rust(0.0)]
+    #[rust(0.0_f32)]
     pub has_base_color_texture: f32,
-    #[rust(0.0)]
+    #[rust(0.0_f32)]
     pub has_metal_roughness_texture: f32,
-    #[rust(0.0)]
+    #[rust(0.0_f32)]
     pub has_normal_texture: f32,
-    #[rust(0.0)]
+    #[rust(0.0_f32)]
     pub has_occlusion_texture: f32,
-    #[rust(0.0)]
+    #[rust(0.0_f32)]
     pub has_emissive_texture: f32,
-    #[rust(0.0)]
+    #[rust(0.0_f32)]
     pub has_env_texture: f32,
-    #[rust(0.0)]
+    #[rust(0.0_f32)]
     pub has_env_atlas_texture: f32,
-    #[rust(0.0)]
+    #[rust(0.0_f32)]
     pub has_env_face_textures: f32,
     #[rust(vec3(0.3, 0.7, 1.0))]
     pub light_dir: Vec3f,
     #[rust(vec3(1.0, 1.0, 1.0))]
     pub light_color: Vec3f,
-    #[rust(0.15)]
+    #[rust(0.15_f32)]
     pub ambient: f32,
-    #[rust(128.0)]
+    #[rust(128.0_f32)]
     pub spec_power: f32,
-    #[rust(0.9)]
+    #[rust(0.9_f32)]
     pub spec_strength: f32,
-    #[rust(1.8)]
+    #[rust(1.8_f32)]
     pub env_intensity: f32,
-    #[rust(0.0)]
+    #[rust(0.0_f32)]
     pub pad1: f32,
     #[deref]
     pub draw_vars: DrawVars,
@@ -929,7 +929,7 @@ pub struct DrawPbr {
     pub local_scale: Vec3f,
     #[live]
     pub draw_clip: Vec4f,
-    #[live(0.0)]
+    #[live(0.0_f32)]
     pub depth_clip: f32,
 }
 

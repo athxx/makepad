@@ -174,7 +174,7 @@ pub struct Metrics {
     pub descender: f64,
     #[live]
     pub line_gap: f64,
-    #[live(1.0)]
+    #[live(1.0_f64)]
     pub line_scale: f64,
 }
 

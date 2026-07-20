@@ -123,21 +123,21 @@ script_mod! {
 #[derive(Script, ScriptHook, Debug)]
 #[repr(C)]
 pub struct DrawIcoSolid {
-    #[rust(0.0)]
+    #[rust(0.0_f32)]
     pub has_env_texture: f32,
     #[rust(vec3(-0.34, 0.88, 0.32))]
     pub light_dir: Vec3f,
     #[rust(vec3(0.58, 0.36, -0.73))]
     pub fill_light_dir: Vec3f,
-    #[rust(0.11)]
+    #[rust(0.11_f32)]
     pub ambient: f32,
-    #[rust(0.74)]
+    #[rust(0.74_f32)]
     pub key_strength: f32,
-    #[rust(0.24)]
+    #[rust(0.24_f32)]
     pub fill_strength: f32,
-    #[rust(0.88)]
+    #[rust(0.88_f32)]
     pub reflectivity: f32,
-    #[rust(1.15)]
+    #[rust(1.15_f32)]
     pub env_intensity: f32,
     #[deref]
     pub draw_vars: DrawVars,
@@ -147,7 +147,7 @@ pub struct DrawIcoSolid {
     pub color: Vec4f,
     #[live]
     pub transform: Mat4f,
-    #[live(1.0)]
+    #[live(1.0_f32)]
     pub depth_clip: f32,
 }
 
@@ -207,7 +207,7 @@ pub struct IcoSphere {
     #[redraw]
     #[live]
     draw_ico: DrawIcoSolid,
-    #[live(0.037)]
+    #[live(0.037_f32)]
     radius: f32,
     #[live(vec4(0.63, 0.65, 0.69, 1.0))]
     diffuse: Vec4f,

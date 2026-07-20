@@ -101,11 +101,11 @@ pub struct TogglePanel {
     animator_panel_progress: f32,
 
     /// The size of the panel when it is fully open.
-    #[live(300.0)]
+    #[live(300.0_f32)]
     open_size: f32,
 
     /// The size of the panel when it is fully closed.
-    #[live(110.0)]
+    #[live(110.0_f32)]
     close_size: f32,
 
     #[animator]

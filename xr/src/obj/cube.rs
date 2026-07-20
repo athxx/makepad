@@ -27,11 +27,11 @@ pub struct Cube {
     size: Vec3f,
     #[live(vec4(0.82, 0.48, 0.28, 1.0))]
     color: Vec4f,
-    #[live(0.02)]
+    #[live(0.02_f32)]
     metallic: f32,
-    #[live(0.52)]
+    #[live(0.52_f32)]
     roughness: f32,
-    #[live(0.02)]
+    #[live(0.02_f32)]
     corner_radius: f32,
     #[live(3u32)]
     corner_segments: u32,

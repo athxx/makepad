@@ -36,7 +36,7 @@ pub struct VectorLine {
     #[redraw]
     #[rust]
     area: Area,
-    #[live(15.0)]
+    #[live(15.0_f64)]
     line_width: f64,
     #[live]
     color: Vec4f,

@@ -67,7 +67,7 @@ pub struct DrawSelection {
     pub next_x: f32,
     #[live]
     pub next_w: f32,
-    #[live(1.0)]
+    #[live(1.0_f32)]
     pub focus: f32,
     #[rust]
     pub prev_prev_rect: Option<Rect>,

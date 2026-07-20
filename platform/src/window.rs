@@ -389,7 +389,7 @@ pub struct ScriptWindowHandle {
     pub transparent: bool,
     #[live(WindowBackdrop::None)]
     pub backdrop: WindowBackdrop,
-    #[live(1.0)]
+    #[live(1.0_f32)]
     pub backdrop_intensity: f32,
     #[live(MacosWindowConfig::default())]
     pub macos: MacosWindowConfig,

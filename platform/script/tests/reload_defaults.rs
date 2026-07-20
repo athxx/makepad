@@ -15,7 +15,7 @@ struct ReloadEnumHolderTest {
 
 #[derive(Debug, Script, ScriptHook)]
 struct ReloadObjectInnerTest {
-    #[live(1.0)]
+    #[live(1.0_f64)]
     value: f64,
     #[rust(7u32)]
     rust_value: u32,

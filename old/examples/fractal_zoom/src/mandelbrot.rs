@@ -428,7 +428,7 @@ pub struct Mandelbrot {
     #[rust]
     is_zooming: bool,
 
-    #[rust(1.0)]
+    #[rust(1.0_f64)]
     zoom_factor: f64,
 
     // this bool flips wether or not you were zooming in or out

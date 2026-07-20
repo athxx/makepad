@@ -85,7 +85,7 @@ pub struct DrawXrFingerCursor {
     stroke_color: Vec4f,
     #[live]
     stroke_width: f32,
-    #[live(0.0)]
+    #[live(0.0_f32)]
     pulse: f32,
 }
 
@@ -163,11 +163,11 @@ pub struct XrView {
     // Panel rendering
     #[live(vec2(320.0, 400.0))]
     logical_size: Vec2d,
-    #[live(0.0004)]
+    #[live(0.0004_f32)]
     pixel_scale: f32,
-    #[live(3.0)]
+    #[live(3.0_f64)]
     dpi_factor: f64,
-    #[live(300.0)]
+    #[live(300.0_f32)]
     depth_scale: f32,
     #[live]
     draw_cursor: DrawXrFingerCursor,

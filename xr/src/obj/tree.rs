@@ -1000,17 +1000,17 @@ pub struct Tree {
     branch_yaw_phase_step: f32,
     #[live(TREE_CHILD_SCALE)]
     child_scale: f32,
-    #[live(0.70)]
+    #[live(0.70_f32)]
     length_scale_0: f32,
-    #[live(0.78)]
+    #[live(0.78_f32)]
     length_scale_1: f32,
-    #[live(0.88)]
+    #[live(0.88_f32)]
     length_scale_2: f32,
-    #[live(0.97)]
+    #[live(0.97_f32)]
     length_scale_3: f32,
-    #[live(1.03)]
+    #[live(1.03_f32)]
     length_scale_4: f32,
-    #[live(1.08)]
+    #[live(1.08_f32)]
     length_scale_rest: f32,
     #[rust]
     cpu_tree: CpuPythagoreanTree,
@@ -1088,7 +1088,7 @@ pub struct DrawTreeBranches {
     pub level: f32,
     #[live]
     pub seed: f32,
-    #[live(1.0)]
+    #[live(1.0_f32)]
     pub depth_clip: f32,
 }
 
@@ -1187,7 +1187,7 @@ pub struct DrawTreeLeaves {
     pub tint: f32,
     #[live]
     pub flutter: f32,
-    #[live(1.0)]
+    #[live(1.0_f32)]
     pub depth_clip: f32,
 }
 

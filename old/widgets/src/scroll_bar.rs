@@ -220,16 +220,16 @@ pub struct ScrollBar {
     smoothing: Option<f64>,
 
     /// The minimum amount of scroll to trigger a flick animation
-    #[live(0.2)]
+    #[live(0.2_f64)]
     flick_scroll_minimum: f64,
     /// The maximum amount of scroll to trigger a flick animation
-    #[live(80.0)]
+    #[live(80.0_f64)]
     flick_scroll_maximum: f64,
     /// The scaling factor for the flick animation
-    #[live(0.005)]
+    #[live(0.005_f64)]
     flick_scroll_scaling: f64,
     /// The decay factor for the flick animation
-    #[live(0.97)]
+    #[live(0.97_f64)]
     flick_scroll_decay: f64,
     /// Whether to enable drag scrolling
     #[live(false)]

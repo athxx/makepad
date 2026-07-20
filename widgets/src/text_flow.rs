@@ -706,7 +706,7 @@ pub struct TextFlow {
     #[live]
     list_item_walk: Walk,
     /// The spacing (in pixels) between the list item marker and the content text.
-    #[live(5.0)]
+    #[live(5.0_f64)]
     list_item_marker_pad: f64,
     #[live]
     table_walk: Walk,
@@ -795,10 +795,10 @@ pub struct TextFlow {
     #[rust]
     last_rate_time: f64,
     /// Number of chars over which to fade (default 50)
-    #[live(50.0)]
+    #[live(50.0_f32)]
     pub fade_chars: f32,
     /// Minimum animation speed in chars per second
-    #[live(100.0)]
+    #[live(100.0_f32)]
     pub min_fade_speed: f32,
 }
 

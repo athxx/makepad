@@ -135,7 +135,7 @@ struct DrawTerminalCursor {
     color_unfocused: Vec4f,
     #[live]
     focus: f32,
-    #[live(1.0)]
+    #[live(1.0_f32)]
     border_width: f32,
 }
 
@@ -227,23 +227,23 @@ pub struct StudioTerminal {
     draw_selection: DrawSelection,
     #[live]
     draw_decor: DrawTerminalDecor,
-    #[live(9.0)]
+    #[live(9.0_f64)]
     font_size: f64,
-    #[live(0.6)]
+    #[live(0.6_f64)]
     cell_width_factor: f64,
-    #[live(1.4)]
+    #[live(1.4_f64)]
     cell_height_factor: f64,
-    #[live(4.0)]
+    #[live(4.0_f64)]
     pad_x: f64,
-    #[live(2.0)]
+    #[live(2.0_f64)]
     pad_y: f64,
-    #[live(0.0)]
+    #[live(0.0_f64)]
     text_y_offset: f64,
-    #[live(0.0)]
+    #[live(0.0_f64)]
     cursor_y_offset: f64,
     #[live(true)]
     bold_is_bright: bool,
-    #[live(0.75)]
+    #[live(0.75_f64)]
     faint_factor: f64,
 
     #[rust]

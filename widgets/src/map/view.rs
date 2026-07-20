@@ -290,15 +290,15 @@ pub struct MapView {
     #[live]
     draw_text: DrawText,
 
-    #[live(4.9041)]
+    #[live(4.9041_f64)]
     center_lon: f64,
-    #[live(52.3676)]
+    #[live(52.3676_f64)]
     center_lat: f64,
-    #[live(14.0)]
+    #[live(14.0_f64)]
     zoom: f64,
-    #[live(11.0)]
+    #[live(11.0_f64)]
     min_zoom: f64,
-    #[live(17.0)]
+    #[live(17.0_f64)]
     max_zoom: f64,
     #[live(false)]
     dark_theme: bool,

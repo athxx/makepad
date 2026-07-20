@@ -282,7 +282,7 @@ pub struct DesignerView {
     area: Area,
     #[rust]
     reapply: bool,
-    #[rust(1.5)]
+    #[rust(1.5_f64)]
     zoom: f64,
     #[rust]
     undo_group: u64,

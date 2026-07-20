@@ -193,11 +193,11 @@ pub struct DrawGameTexture {
 pub struct DrawGameCube {
     #[deref]
     pub cube: DrawCube,
-    #[live(0.0)]
+    #[live(0.0_f32)]
     pub glow: f32,
     #[live(vec3(0.75, 0.87, 0.96))]
     pub fog_color: Vec3f,
-    #[live(0.0)]
+    #[live(0.0_f32)]
     pub fog_density: f32,
 }
 
@@ -233,13 +233,13 @@ pub struct DrawGameTerrain {
     pub draw_vars: DrawVars,
     #[live]
     pub transform: Mat4f,
-    #[live(1.0)]
+    #[live(1.0_f32)]
     pub depth_clip: f32,
     #[live(vec3(0.35, 0.8, 0.45))]
     pub light_dir: Vec3f,
     #[live(vec3(0.75, 0.87, 0.96))]
     pub fog_color: Vec3f,
-    #[live(0.0)]
+    #[live(0.0_f32)]
     pub fog_density: f32,
 }
 

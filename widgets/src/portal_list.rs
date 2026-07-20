@@ -363,15 +363,15 @@ pub struct PortalList {
     #[rust(0usize)]
     visible_items: usize,
 
-    #[live(0.2)]
+    #[live(0.2_f64)]
     flick_scroll_minimum: f64,
-    #[live(80.0)]
+    #[live(80.0_f64)]
     flick_scroll_maximum: f64,
-    #[live(0.005)]
+    #[live(0.005_f64)]
     flick_scroll_scaling: f64,
-    #[live(0.97)]
+    #[live(0.97_f64)]
     flick_scroll_decay: f64,
-    #[live(80.0)]
+    #[live(80.0_f64)]
     max_pull_down: f64,
     #[live(true)]
     align_top_when_empty: bool,
@@ -425,12 +425,12 @@ pub struct PortalList {
     #[live(false)]
     smooth_tail: bool,
     /// Speed factor for smooth tail animation (0.0-1.0, lower = slower). Default 0.25.
-    #[live(0.25)]
+    #[live(0.25_f64)]
     smooth_tail_speed: f64,
 
     #[rust(false)]
     tail_range: bool,
-    #[rust(0.0)]
+    #[rust(0.0_f64)]
     tail_adjustment_needed: f64,
     #[rust(false)]
     at_end: bool,

@@ -112,43 +112,43 @@ pub struct OscSettings {
     osc_type: U32A<OscType>,
     #[live(0)]
     transpose: i64a,
-    #[live(0.0)]
+    #[live(0.0_f32)]
     detune: f32a,
-    #[live(0.0)]
+    #[live(0.0_f32)]
     harmonic: f32a,
-    #[live(0.0)]
+    #[live(0.0_f32)]
     harmonicenv: f32a,
-    #[live(0.0)]
+    #[live(0.0_f32)]
     harmoniclfo: f32a,
 }
 
 #[derive(Live, LiveHook, LiveRegister, LiveAtomic, Debug, LiveRead, Clone)]
 pub struct SupersawSettings {
-    #[live(0.0)]
+    #[live(0.0_f32)]
     spread: f32a,
-    #[live(0.0)]
+    #[live(0.0_f32)]
     diffuse: f32a,
 }
 
 #[derive(Live, LiveHook, LiveRegister, LiveAtomic, Debug, LiveRead)]
 pub struct EnvelopeSettings {
-    #[live(0.0)]
+    #[live(0.0_f32)]
     predelay: f32a,
-    #[live(0.05)]
+    #[live(0.05_f32)]
     a: f32a,
-    #[live(0.0)]
+    #[live(0.0_f32)]
     h: f32a,
-    #[live(0.2)]
+    #[live(0.2_f32)]
     d: f32a,
-    #[live(0.5)]
+    #[live(0.5_f32)]
     s: f32a,
-    #[live(0.2)]
+    #[live(0.2_f32)]
     r: f32a,
 }
 
 #[derive(Live, LiveHook, LiveRegister, LiveAtomic, Debug, LiveRead)]
 pub struct LFOSettings {
-    #[live(0.2)]
+    #[live(0.2_f32)]
     rate: f32a,
     #[live(0)]
     keysync: u32a,
@@ -165,27 +165,27 @@ pub struct LFOState {
 pub struct FilterSettings {
     #[live]
     filter_type: U32A<FilterType>,
-    #[live(0.5)]
+    #[live(0.5_f32)]
     cutoff: f32a,
-    #[live(0.05)]
+    #[live(0.05_f32)]
     resonance: f32a,
-    #[live(0.1)]
+    #[live(0.1_f32)]
     envelope_amount: f32a,
-    #[live(0.1)]
+    #[live(0.1_f32)]
     lfo_amount: f32a,
-    #[live(0.1)]
+    #[live(0.1_f32)]
     touch_amount: f32a,
-    #[live(0.0)]
+    #[live(0.0_f32)]
     envelope_curvature: f32a,
 }
 
 #[derive(Live, LiveHook, LiveRegister, LiveAtomic, Debug, LiveRead)]
 pub struct TouchSettings {
-    #[live(0.5)]
+    #[live(0.5_f32)]
     offset: f32a,
-    #[live(1.0)]
+    #[live(1.0_f32)]
     scale: f32a,
-    #[live(0.5)]
+    #[live(0.5_f32)]
     curve: f32a,
 }
 
@@ -194,39 +194,39 @@ pub struct BitCrushSettings {
     #[live(false)]
     enable: boola,
 
-    #[live(0.4)]
+    #[live(0.4_f32)]
     amount: f32a,
 }
 
 #[derive(Live, LiveHook, LiveRegister, LiveAtomic, Debug, LiveRead)]
 pub struct BlurSettings {
-    #[live(0.4)]
+    #[live(0.4_f32)]
     size: f32a,
-    #[live(0.4)]
+    #[live(0.4_f32)]
     std: f32a,
 }
 
 #[derive(Live, LiveHook, LiveRegister, LiveAtomic, Debug, LiveRead)]
 pub struct ShadowSettings {
-    #[live(0.4)]
+    #[live(0.4_f32)]
     opacity: f32a,
-    #[live(2.0)]
+    #[live(2.0_f32)]
     x: f32a,
-    #[live(2.0)]
+    #[live(2.0_f32)]
     y: f32a,
 }
 
 #[derive(Live, LiveHook, LiveRegister, LiveAtomic, Debug, LiveRead)]
 pub struct DelaySettings {
-    #[live(0.15)]
+    #[live(0.15_f32)]
     delaysend: f32a,
-    #[live(0.8)]
+    #[live(0.8_f32)]
     delayfeedback: f32a,
-    #[live(0.9)]
+    #[live(0.9_f32)]
     cross: f32a,
-    #[live(0.1)]
+    #[live(0.1_f32)]
     difference: f32a,
-    #[live(0.7)]
+    #[live(0.7_f32)]
     length: f32a,
 }
 
@@ -248,7 +248,7 @@ pub struct SequencerSettings {
     #[live]
     rootnote: U32A<RootNote>,
 
-    #[live(125.0)]
+    #[live(125.0_f32)]
     bpm: f32a,
     #[live(false)]
     playing: boola,
@@ -306,15 +306,15 @@ pub struct IronFishSettings {
     chorus: ChorusSettings,
     #[live]
     reverb: ReverbSettings,
-    #[live(48000.0)]
+    #[live(48000.0_f32)]
     sample_rate: f32a,
-    #[live(0.5)]
+    #[live(0.5_f32)]
     osc_balance: f32a,
-    #[live(0.1)]
+    #[live(0.1_f32)]
     sub_osc: f32a,
-    #[live(0.0)]
+    #[live(0.0_f32)]
     noise: f32a,
-    #[live(0.0)]
+    #[live(0.0_f32)]
     portamento: f32a,
     //    #[live]
     //  blur: BlurSettings,
@@ -940,25 +940,25 @@ enum EnvelopePhase {
 
 #[derive(Live, LiveHook, LiveRegister, LiveAtomic, Debug, LiveRead)]
 pub struct ChorusSettings {
-    #[live(0.1)]
+    #[live(0.1_f32)]
     mindelay: f32a,
-    #[live(0.4)]
+    #[live(0.4_f32)]
     moddepth: f32a,
-    #[live(0.3)]
+    #[live(0.3_f32)]
     rate: f32a,
-    #[live(0.4)]
+    #[live(0.4_f32)]
     phasediff: f32a,
-    #[live(0.5)]
+    #[live(0.5_f32)]
     mix: f32a,
-    #[live(0.0)]
+    #[live(0.0_f32)]
     feedback: f32a,
 }
 
 #[derive(Live, LiveHook, LiveRegister, LiveAtomic, Debug, LiveRead)]
 pub struct ReverbSettings {
-    #[live(0.00)]
+    #[live(0.00_f32)]
     mix: f32a,
-    #[live(0.04)]
+    #[live(0.04_f32)]
     feedback: f32a,
 }
 

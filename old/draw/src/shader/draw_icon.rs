@@ -78,11 +78,11 @@ live_design! {
 #[derive(Live, LiveRegister)]
 #[repr(C)]
 pub struct DrawIcon {
-    #[live(1.0)]
+    #[live(1.0_f32)]
     pub brightness: f32,
-    #[live(0.6)]
+    #[live(0.6_f32)]
     pub curve: f32,
-    #[live(0.5)]
+    #[live(0.5_f32)]
     pub linearize: f32,
 
     #[live]
@@ -91,7 +91,7 @@ pub struct DrawIcon {
     pub svg_path: ArcStringMut,
     #[live]
     pub translate: Vec2d,
-    #[live(1.0)]
+    #[live(1.0_f64)]
     pub scale: f64,
 
     #[rust]
@@ -106,9 +106,9 @@ pub struct DrawIcon {
     pub rect_size: Vec2f,
     #[calc]
     pub draw_clip: Vec4f,
-    #[live(1.0)]
+    #[live(1.0_f32)]
     pub depth_clip: f32,
-    #[live(1.0)]
+    #[live(1.0_f32)]
     pub draw_depth: f32,
 
     #[live]

@@ -153,7 +153,7 @@ pub struct DrawSvg {
     pub has_animations: bool,
     #[live(true)]
     pub preserve_aspect: bool,
-    #[live(1.0)]
+    #[live(1.0_f64)]
     pub scale: f64,
     #[deref]
     pub draw_super: DrawVector,
