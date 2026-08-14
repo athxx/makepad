@@ -3,7 +3,7 @@ name = "makepad-geodata"
 version = "0.1.0"
 edition = "2021"
 description = "Bulk open-geodata fetcher and per-layer overlay database builder"
-license = "MIT OR Apache-2.0"
+license = "MPL-2.0"
 
 [lib]
 name = "makepad_geodata"
