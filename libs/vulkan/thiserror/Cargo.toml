@@ -33,7 +33,7 @@ categories = [
     "rust-patterns",
     "no-std",
 ]
-license = "MIT OR Apache-2.0"
+license = "MPL-2.0"
 repository = "https://github.com/dtolnay/thiserror"
 
 [package.metadata.docs.rs]

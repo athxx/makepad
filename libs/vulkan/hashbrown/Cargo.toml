@@ -37,7 +37,7 @@ categories = [
     "data-structures",
     "no-std",
 ]
-license = "MIT OR Apache-2.0"
+license = "MPL-2.0"
 repository = "https://github.com/rust-lang/hashbrown"
 
 [package.metadata.docs.rs]

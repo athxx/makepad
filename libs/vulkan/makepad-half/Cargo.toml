@@ -38,7 +38,7 @@ categories = [
     "data-structures",
     "encoding",
 ]
-license = "MIT OR Apache-2.0"
+license = "MPL-2.0"
 repository = "https://github.com/VoidStarKat/half-rs"
 
 [package.metadata.docs.rs]

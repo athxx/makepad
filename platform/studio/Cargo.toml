@@ -3,7 +3,7 @@ name = "makepad-studio-protocol"
 version = "0.1.0"
 edition = "2021"
 description = "Shared Studio app<->studio wire protocol types"
-license = "MIT OR Apache-2.0"
+license = "MPL-2.0"
 
 [dependencies]
 makepad-error-log = { path = "../../libs/error_log", version = "1.0.0" }

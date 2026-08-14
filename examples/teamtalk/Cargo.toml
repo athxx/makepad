@@ -4,7 +4,7 @@ version = "1.0.0"
 authors = ["Makepad <info@makepad.nl>"]
 edition = "2021"
 description = "Makepad teamtalk"
-license = "MIT OR Apache-2.0"
+license = "MPL-2.0"
 homepage = "https://github.com/makepad/makepad/"
 repository = "https://github.com/makepad/makepad/"
 metadata.makepad-auto-version = "Ywx5y_Q1A52NaelyQCiYcZ6m0Po="

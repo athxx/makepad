@@ -3,6 +3,6 @@ name = "makepad-filesystem-watcher"
 version = "0.1.0"
 edition = "2021"
 description = "Platform-specific filesystem watcher for Studio backends"
-license = "MIT OR Apache-2.0"
+license = "MPL-2.0"
 
 [dependencies]

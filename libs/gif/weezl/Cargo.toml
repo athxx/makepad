@@ -4,7 +4,7 @@ version = "0.1.12"
 edition = "2018"
 authors = ["The image-rs Developers"]
 description = "Fast LZW compression and decompression."
-license = "MIT OR Apache-2.0"
+license = "MPL-2.0"
 repository = "https://github.com/image-rs/weezl"
 
 [features]
