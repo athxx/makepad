@@ -41,7 +41,7 @@ keywords = [
     "word",
     "boundary",
 ]
-license = "MIT OR Apache-2.0"
+license = "MPL-2.0"
 repository = "https://github.com/unicode-rs/unicode-segmentation"
 
 [lib]

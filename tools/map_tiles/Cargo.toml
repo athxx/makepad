@@ -3,7 +3,7 @@ name = "makepad-map-tiles"
 version = "0.1.0"
 edition = "2021"
 description = "Build, audit, and probe disk-streamable OpenStreetMap tile archives"
-license = "MIT OR Apache-2.0"
+license = "MPL-2.0"
 
 [dependencies]
 brotli = "8.0"

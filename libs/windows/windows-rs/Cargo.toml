@@ -25,7 +25,7 @@ description = "Rust for Windows"
 documentation = "https://microsoft.github.io/windows-docs-rs/"
 readme = "readme.md"
 categories = ["os::windows-apis"]
-license = "MIT OR Apache-2.0"
+license = "MPL-2.0"
 repository = "https://github.com/microsoft/windows-rs"
 
 [package.metadata.docs.rs]

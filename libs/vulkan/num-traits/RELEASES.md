@@ -76,7 +76,7 @@
 
 # Release 0.2.14 (2020-10-29)
 
-- Clarify the license specification as "MIT OR Apache-2.0".
+- Clarify the license specification as "MPL-2.0".
 
 **Contributors**: @cuviper
 
