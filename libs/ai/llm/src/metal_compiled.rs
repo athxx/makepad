@@ -1126,7 +1126,7 @@ pub fn create_context_dirty_buffer(
 fn os_page_size() -> usize {
     #[cfg(unix)]
     {
-        extern "C" {
+        unsafe extern "C" {
             fn getpagesize() -> i32;
         }
         let page = unsafe { getpagesize() };

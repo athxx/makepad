@@ -7,7 +7,7 @@ use std::collections::HashMap;
 #[derive(Clone, Debug)]
 pub struct XRefEntry {
     pub location: XRefLocation,
-    pub gen: u16,
+    pub r#gen: u16,
     pub in_use: bool,
 }
 
@@ -110,7 +110,7 @@ fn parse_xref_table(data: &[u8], offset: usize) -> PdfResult<XRefTable> {
                         location: XRefLocation::Uncompressed {
                             offset: entry_offset,
                         },
-                        gen: entry_gen,
+                        r#gen: entry_gen,
                         in_use: true,
                     },
                 );
@@ -222,7 +222,7 @@ fn parse_xref_stream(data: &[u8], offset: usize) -> PdfResult<XRefTable> {
                             location: XRefLocation::Uncompressed {
                                 offset: field1 as usize,
                             },
-                            gen: field2 as u16,
+                            r#gen: field2 as u16,
                             in_use: true,
                         },
                     );
@@ -236,7 +236,7 @@ fn parse_xref_stream(data: &[u8], offset: usize) -> PdfResult<XRefTable> {
                                 obj_stream_obj_num: field1 as u32,
                                 index: field2 as usize,
                             },
-                            gen: 0,
+                            r#gen: 0,
                             in_use: true,
                         },
                     );
@@ -284,12 +284,12 @@ fn brute_force_xref(data: &[u8]) -> PdfResult<XRefTable> {
     while i < data.len().saturating_sub(10) {
         // Look for patterns like "123 0 obj"
         if data[i].is_ascii_digit() {
-            if let Some((obj_num, gen, end_pos)) = try_parse_obj_header(data, i) {
+            if let Some((obj_num, r#gen, end_pos)) = try_parse_obj_header(data, i) {
                 entries.insert(
                     obj_num,
                     XRefEntry {
                         location: XRefLocation::Uncompressed { offset: i },
-                        gen,
+                        r#gen,
                         in_use: true,
                     },
                 );
@@ -380,7 +380,7 @@ pub fn parse_indirect_object_at(data: &[u8], offset: usize) -> PdfResult<(ObjRef
         PdfObj::Int(n) => n as u32,
         _ => return Err(PdfError::new("expected object number")),
     };
-    let gen = match lex.read_object()? {
+    let r#gen = match lex.read_object()? {
         PdfObj::Int(g) => g as u16,
         _ => return Err(PdfError::new("expected generation number")),
     };
@@ -436,5 +436,5 @@ pub fn parse_indirect_object_at(data: &[u8], offset: usize) -> PdfResult<(ObjRef
         obj
     };
 
-    Ok((ObjRef { num, gen }, obj))
+    Ok((ObjRef { num, r#gen }, obj))
 }

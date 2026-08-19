@@ -1132,7 +1132,7 @@ impl AudioUnitAccess {
                             const OTHER_AUDIO_DUCKING_CONFIGURATION: u32 = 2108;
                             const DUCKING_LEVEL_MIN: u32 = 10;
                             const SCOPE_GLOBAL: u32 = 0;
-                            extern "C" {
+                            unsafe extern "C" {
                                 fn AudioUnitSetProperty(
                                     unit: *mut std::ffi::c_void,
                                     property_id: u32,

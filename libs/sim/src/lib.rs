@@ -95,24 +95,24 @@ pub(crate) fn vec3_normalize(v: makepad_math::Vec3f) -> makepad_math::Vec3f {
 #[derive(Clone, Copy, PartialEq, Eq, Hash, Debug)]
 pub struct EntityId {
     pub index: u32,
-    pub gen: u32,
+    pub r#gen: u32,
 }
 
 impl EntityId {
     pub fn to_bits(self) -> u64 {
-        (self.gen as u64) << 32 | self.index as u64
+        (self.r#gen as u64) << 32 | self.index as u64
     }
     pub fn from_bits(bits: u64) -> Self {
         Self {
             index: bits as u32,
-            gen: (bits >> 32) as u32,
+            r#gen: (bits >> 32) as u32,
         }
     }
 }
 
 #[derive(Clone, Debug)]
 struct Slot<T> {
-    gen: u32,
+    r#gen: u32,
     value: Option<T>,
 }
 
@@ -157,24 +157,24 @@ impl<T> SlotMap<T> {
             slot.value = Some(value);
             EntityId {
                 index,
-                gen: slot.gen,
+                r#gen: slot.r#gen,
             }
         } else {
             let index = self.slots.len() as u32;
             self.slots.push(Slot {
-                gen: 0,
+                r#gen: 0,
                 value: Some(value),
             });
-            EntityId { index, gen: 0 }
+            EntityId { index, r#gen: 0 }
         }
     }
 
     pub fn free(&mut self, id: EntityId) -> Option<T> {
         let slot = self.slots.get_mut(id.index as usize)?;
-        if slot.gen != id.gen || slot.value.is_none() {
+        if slot.r#gen != id.r#gen || slot.value.is_none() {
             return None;
         }
-        slot.gen = slot.gen.wrapping_add(1);
+        slot.r#gen = slot.r#gen.wrapping_add(1);
         self.len -= 1;
         let value = slot.value.take();
         self.free.push(id.index);
@@ -183,7 +183,7 @@ impl<T> SlotMap<T> {
 
     pub fn get(&self, id: EntityId) -> Option<&T> {
         let slot = self.slots.get(id.index as usize)?;
-        if slot.gen != id.gen {
+        if slot.r#gen != id.r#gen {
             return None;
         }
         slot.value.as_ref()
@@ -191,7 +191,7 @@ impl<T> SlotMap<T> {
 
     pub fn get_mut(&mut self, id: EntityId) -> Option<&mut T> {
         let slot = self.slots.get_mut(id.index as usize)?;
-        if slot.gen != id.gen {
+        if slot.r#gen != id.r#gen {
             return None;
         }
         slot.value.as_mut()
@@ -207,7 +207,7 @@ impl<T> SlotMap<T> {
                 (
                     EntityId {
                         index: i as u32,
-                        gen: slot.gen,
+                        r#gen: slot.r#gen,
                     },
                     v,
                 )
@@ -217,12 +217,12 @@ impl<T> SlotMap<T> {
 
     pub fn iter_mut(&mut self) -> impl Iterator<Item = (EntityId, &mut T)> {
         self.slots.iter_mut().enumerate().filter_map(|(i, slot)| {
-            let gen = slot.gen;
+            let r#gen = slot.r#gen;
             slot.value.as_mut().map(move |v| {
                 (
                     EntityId {
                         index: i as u32,
-                        gen,
+                        r#gen,
                     },
                     v,
                 )
@@ -328,7 +328,7 @@ mod tests {
         let b = map.alloc(2);
         // slot reused, generation bumped
         assert_eq!(a.index, b.index);
-        assert_ne!(a.gen, b.gen);
+        assert_ne!(a.r#gen, b.r#gen);
         assert_eq!(map.get(a), None);
         assert_eq!(map.get(b), Some(&2));
         // double free is a no-op
@@ -351,7 +351,7 @@ mod tests {
     fn entity_id_bits_roundtrip() {
         let id = EntityId {
             index: 12345,
-            gen: 678,
+            r#gen: 678,
         };
         assert_eq!(EntityId::from_bits(id.to_bits()), id);
     }

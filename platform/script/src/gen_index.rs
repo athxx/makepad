@@ -213,8 +213,8 @@ impl<T: Default> GenVec<T> {
     pub fn allocate<R: GenRef>(&mut self, free_list: &mut Vec<u32>) -> R {
         if let Some(index) = free_list.pop() {
             // Reuse freed slot - generation was already incremented when freed
-            let gen = self.slots[index as usize].generation;
-            R::new(index, gen)
+            let r#gen = self.slots[index as usize].generation;
+            R::new(index, r#gen)
         } else {
             // Grow the vec
             let index = self.slots.len() as u32;

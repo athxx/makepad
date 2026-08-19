@@ -1,9 +1,9 @@
 [package]
 name = "makepad-cef"
 version = "0.1.0"
-edition = "2021"
+edition = "2024"
 build = "build.rs"
-license = "MPL-2.0"
+license = "LGPL-3.0"
 
 [dependencies]
 libloading = { path = "../vulkan/libloading", version = "0.8.9" }

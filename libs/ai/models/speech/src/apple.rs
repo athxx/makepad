@@ -5,7 +5,7 @@ use std::os::raw::{c_char, c_float, c_int};
 
 use crate::SpeechAudio;
 
-extern "C" {
+unsafe extern "C" {
     fn apple_tts_synthesize(
         text: *const c_char,
         voice: *const c_char,

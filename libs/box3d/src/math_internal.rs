@@ -5,10 +5,10 @@
 use crate::b3_validate;
 use crate::math_functions::*;
 
-pub const TWO_PI: f32 = 6.283185307;
-pub const PI_OVER_TWO: f32 = 1.570796327;
-pub const PI_OVER_FOUR: f32 = 0.785398163;
-pub const SQRT3: f32 = 1.732050808;
+pub const TWO_PI: f32 = std::f32::consts::TAU;
+pub const PI_OVER_TWO: f32 = std::f32::consts::FRAC_PI_2;
+pub const PI_OVER_FOUR: f32 = std::f32::consts::FRAC_PI_4;
+pub const SQRT3: f32 = 1.732050808; // std::f32::consts::SQRT_3;
 
 // todo eliminate this
 pub const BOUNDS3_EMPTY: AABB = AABB {

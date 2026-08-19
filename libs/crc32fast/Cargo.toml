@@ -10,8 +10,7 @@
 # See Cargo.toml.orig for the original contents.
 
 [package]
-edition = "2021"
-rust-version = "1.63"
+edition = "2024"
 name = "crc32fast"
 version = "1.5.0"
 authors = [
@@ -37,7 +36,7 @@ categories = [
     "algorithms",
     "no-std",
 ]
-license = "MPL-2.0"
+license = "LGPL-3.0"
 repository = "https://github.com/srijs/rust-crc32fast"
 
 [features]

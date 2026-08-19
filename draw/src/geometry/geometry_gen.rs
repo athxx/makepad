@@ -267,8 +267,8 @@ pub fn script_mod(vm: &mut ScriptVm) -> ScriptValue {
     // lets make a Quad geometry here
     set_script_value_to_pod!(vm, geom.QuadVertex);
     // now lets also build a quad vertexbuffer
-    let gen = shared(vm, id!(QuadGeom), || GeometryGen::from_quad_2d(0., 0., 1., 1.));
-    set_script_value!(vm, geom.QuadGeom = gen);
+    let r#gen = shared(vm, id!(QuadGeom), || GeometryGen::from_quad_2d(0., 0., 1., 1.));
+    set_script_value!(vm, geom.QuadGeom = r#gen);
     // Frame-ring strip for the exploded view's container outlines.
     set_script_value_to_pod!(vm, geom.OutlineVertex);
     let ogen = shared(vm, id!(OutlineGeom), GeometryGen::from_outline_ring);

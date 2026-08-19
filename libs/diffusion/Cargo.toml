@@ -1,7 +1,7 @@
 [package]
 name = "makepad-diffusion"
 version = "0.1.0"
-edition = "2021"
+edition = "2024"
 description = "Diffusion pipeline scaffolding for Makepad ggml backends"
 license = "MIT"
 

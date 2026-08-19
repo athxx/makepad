@@ -3768,7 +3768,7 @@ impl CglRenderBridge {
         type CGLContextObj = *mut c_void;
 
         #[link(name = "OpenGL", kind = "framework")]
-        extern "C" {
+        unsafe extern "C" {
             fn CGLChoosePixelFormat(
                 attribs: *const u32,
                 pix: *mut CGLPixelFormatObj,
@@ -3814,7 +3814,7 @@ impl CglRenderBridge {
             );
 
             // Load OpenGL.framework for dlsym-based proc address lookup
-            extern "C" {
+            unsafe extern "C" {
                 fn dlopen(path: *const i8, mode: i32) -> *mut c_void;
             }
             let framework_path = b"/System/Library/Frameworks/OpenGL.framework/OpenGL\0";
@@ -3834,7 +3834,7 @@ impl CglRenderBridge {
 
     pub fn make_current(&self) {
         #[link(name = "OpenGL", kind = "framework")]
-        extern "C" {
+        unsafe extern "C" {
             fn CGLSetCurrentContext(ctx: *mut std::ffi::c_void) -> i32;
         }
         unsafe {
@@ -3843,7 +3843,7 @@ impl CglRenderBridge {
     }
 
     pub fn get_proc_address(&self, name: &str) -> *const std::ffi::c_void {
-        extern "C" {
+        unsafe extern "C" {
             fn dlsym(handle: *mut std::ffi::c_void, symbol: *const i8) -> *mut std::ffi::c_void;
         }
         let c_name = std::ffi::CString::new(name).unwrap();
@@ -3887,7 +3887,7 @@ impl CglRenderBridge {
         type GlBindTextureFn = unsafe extern "C" fn(GLenum, GLuint);
 
         #[link(name = "OpenGL", kind = "framework")]
-        extern "C" {
+        unsafe extern "C" {
             fn CGLTexImageIOSurface2D(
                 ctx: *mut c_void,
                 target: GLenum,
@@ -3947,7 +3947,7 @@ impl EaglRenderBridge {
         // kEAGLRenderingAPIOpenGLES3 = 3
         const K_EAGL_RENDERING_API_OPENGLES3: u64 = 3;
 
-        extern "C" {
+        unsafe extern "C" {
             fn dlopen(path: *const i8, mode: i32) -> *mut c_void;
         }
 
@@ -3977,7 +3977,7 @@ impl EaglRenderBridge {
     }
 
     pub fn get_proc_address(&self, name: &str) -> *const std::ffi::c_void {
-        extern "C" {
+        unsafe extern "C" {
             fn dlsym(handle: *mut std::ffi::c_void, symbol: *const i8) -> *mut std::ffi::c_void;
         }
         let c_name = std::ffi::CString::new(name).unwrap();
@@ -4016,7 +4016,7 @@ impl EaglRenderBridge {
 
         type GlBindTextureFn = unsafe extern "C" fn(u32, u32);
 
-        extern "C" {
+        unsafe extern "C" {
             fn CVOpenGLESTextureCacheCreate(
                 allocator: *const std::ffi::c_void,
                 cache_attrs: *const std::ffi::c_void,

@@ -32,7 +32,7 @@ mod imp {
         ra_count: c_int,
     }
 
-    extern "C" {
+    unsafe extern "C" {
         fn open(path: *const c_char, flags: c_int, ...) -> c_int;
         fn close(fd: c_int) -> c_int;
         fn lseek(fd: c_int, offset: i64, whence: c_int) -> i64;

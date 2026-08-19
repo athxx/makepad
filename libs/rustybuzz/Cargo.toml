@@ -10,7 +10,7 @@
 # See Cargo.toml.orig for the original contents.
 
 [package]
-edition = "2021"
+edition = "2024"
 name = "rustybuzz"
 version = "0.18.0"
 authors = ["Yevhenii Reizner <razrfalcon@gmail.com>"]
@@ -33,7 +33,6 @@ repository = "https://github.com/RazrFalcon/rustybuzz"
 
 [dependencies.bitflags]
 version = "2.4.1"
-path = "../bitflags"
 
 [dependencies.bytemuck]
 version = "1.5"
@@ -46,7 +45,6 @@ path = "../error_log"
 
 [dependencies.smallvec]
 version = "1.6"
-path = "../smallvec"
 
 [dependencies.ttf-parser]
 version = "0.24.1"

@@ -1851,13 +1851,13 @@ mod imp {
     const _GGML_METALLIB_BYTES: &[u8] = include_bytes!(env!("MAKEPAD_GGML_METALLIB"));
 
     #[link(name = "Metal", kind = "framework")]
-    extern "C" {
+    unsafe extern "C" {
         fn MTLCreateSystemDefaultDevice() -> ObjcId;
         fn MTLCopyAllDevices() -> ObjcId;
     }
 
     #[link(name = "Foundation", kind = "framework")]
-    extern "C" {}
+    unsafe extern "C" {}
 
     #[repr(C)]
     #[derive(Copy, Clone)]

@@ -474,10 +474,11 @@ pub fn no_icon_requested() -> bool {
 }
 
 pub fn set_no_icon_requested(no_icon: bool) {
+    // SAFETY: build-tool driver; env is mutated before worker threads spawn.
     if no_icon {
-        env::set_var("MAKEPAD_NO_ICON", "1");
+        unsafe { env::set_var("MAKEPAD_NO_ICON", "1"); }
     } else {
-        env::remove_var("MAKEPAD_NO_ICON");
+        unsafe { env::remove_var("MAKEPAD_NO_ICON"); }
     }
 }
 

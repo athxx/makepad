@@ -2,11 +2,11 @@
 name = "makepad-wasm-bridge"
 version = "1.0.0"
 authors = ["Makepad <info@makepad.nl>"]
-edition = "2021"
+edition = "2024"
 description = "Makepad wasm bridge"
-license = "MPL-2.0"
-homepage = "https://github.com/makepad/makepad/"
-repository = "https://github.com/makepad/makepad/"
+license = "LGPL-3.0"
+homepage = "https://github.com/visokit/viso/"
+repository = "https://github.com/visokit/viso/"
 metadata.makepad-auto-version = "5MuD1fSz_tnv-HAYCGwI-RXL-nM="
 
 [dependencies]

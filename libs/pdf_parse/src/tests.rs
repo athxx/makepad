@@ -151,7 +151,7 @@ fn test_lex_indirect_ref() {
     match obj {
         PdfObj::Ref(r) => {
             assert_eq!(r.num, 10);
-            assert_eq!(r.gen, 0);
+            assert_eq!(r.r#gen, 0);
         }
         _ => panic!("expected Ref"),
     }

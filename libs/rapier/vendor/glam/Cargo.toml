@@ -1,6 +1,5 @@
 [package]
-edition = "2021"
-rust-version = "1.68.2"
+edition = "2024"
 name = "glam"
 version = "0.30.10"
 authors = ["Cameron Hart <cameron.hart@gmail.com>"]
@@ -23,7 +22,7 @@ categories = [
     "game-engines",
     "no-std",
 ]
-license = "MPL-2.0"
+license = "LGPL-3.0"
 repository = "https://github.com/bitshifter/glam-rs"
 
 [features]

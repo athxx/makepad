@@ -91,7 +91,7 @@ fn orphaned_stdin_app() -> bool {
         if !crate::app_main::should_run_stdin_loop_from_env() {
             return false;
         }
-        extern "C" {
+        unsafe extern "C" {
             fn getppid() -> i32;
         }
         unsafe { getppid() == 1 }
@@ -227,7 +227,7 @@ pub fn process_footprint_bytes() -> Option<u64> {
         // natural_t count up to and including phys_footprint
         let count =
             (std::mem::size_of::<TaskVmInfo>() / std::mem::size_of::<u32>()) as u32;
-        extern "C" {
+        unsafe extern "C" {
             fn mach_task_self() -> u32;
             fn task_info(
                 task: u32,

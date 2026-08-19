@@ -1,7 +1,7 @@
 [package]
 name = "makepad-voice"
 version = "0.1.0"
-edition = "2021"
+edition = "2024"
 description = "Pure Rust CPU-only SIMD+threaded Whisper inference"
 license = "MIT"
 

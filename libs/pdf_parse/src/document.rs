@@ -299,7 +299,7 @@ mod tests {
             10,
             XRefEntry {
                 location: XRefLocation::Uncompressed { offset: 0 },
-                gen: 0,
+                r#gen: 0,
                 in_use: true,
             },
         );
@@ -310,7 +310,7 @@ mod tests {
                     obj_stream_obj_num: 10,
                     index: 0,
                 },
-                gen: 0,
+                r#gen: 0,
                 in_use: true,
             },
         );
@@ -321,7 +321,7 @@ mod tests {
                     obj_stream_obj_num: 10,
                     index: 1,
                 },
-                gen: 0,
+                r#gen: 0,
                 in_use: true,
             },
         );

@@ -1525,43 +1525,38 @@ impl ScriptValue {
         if self.0 < Self::TYPE_INLINE_STRING_1 {
             return Some(f(""));
         } else if self.0 < Self::TYPE_INLINE_STRING_2 {
-            return Some(f(unsafe {
-                std::str::from_utf8_unchecked(&[(self.0 & 0xff) as u8])
-            }));
+            let bytes = [(self.0 & 0xff) as u8];
+            return Some(f(unsafe { std::str::from_utf8_unchecked(&bytes) }));
         } else if self.0 < Self::TYPE_INLINE_STRING_3 {
-            return Some(f(unsafe {
-                std::str::from_utf8_unchecked(&[
-                    (self.0 & 0xff) as u8,
-                    ((self.0 >> 8) & 0xff) as u8,
-                ])
-            }));
+            let bytes = [
+                (self.0 & 0xff) as u8,
+                ((self.0 >> 8) & 0xff) as u8,
+            ];
+            return Some(f(unsafe { std::str::from_utf8_unchecked(&bytes) }));
         } else if self.0 < Self::TYPE_INLINE_STRING_4 {
-            return Some(f(unsafe {
-                std::str::from_utf8_unchecked(&[
-                    (self.0 & 0xff) as u8,
-                    ((self.0 >> 8) & 0xff) as u8,
-                    ((self.0 >> 16) & 0xff) as u8,
-                ])
-            }));
+            let bytes = [
+                (self.0 & 0xff) as u8,
+                ((self.0 >> 8) & 0xff) as u8,
+                ((self.0 >> 16) & 0xff) as u8,
+            ];
+            return Some(f(unsafe { std::str::from_utf8_unchecked(&bytes) }));
         } else if self.0 < Self::TYPE_INLINE_STRING_5 {
-            return Some(f(unsafe {
-                std::str::from_utf8_unchecked(&[
-                    (self.0 & 0xff) as u8,
-                    ((self.0 >> 8) & 0xff) as u8,
-                    ((self.0 >> 16) & 0xff) as u8,
-                    ((self.0 >> 24) & 0xff) as u8,
-                ])
-            }));
+            let bytes = [
+                (self.0 & 0xff) as u8,
+                ((self.0 >> 8) & 0xff) as u8,
+                ((self.0 >> 16) & 0xff) as u8,
+                ((self.0 >> 24) & 0xff) as u8,
+            ];
+            return Some(f(unsafe { std::str::from_utf8_unchecked(&bytes) }));
         } else {
-            return Some(f(unsafe {
-                std::str::from_utf8_unchecked(&[
-                    (self.0 & 0xff) as u8,
-                    ((self.0 >> 8) & 0xff) as u8,
-                    ((self.0 >> 16) & 0xff) as u8,
-                    ((self.0 >> 24) & 0xff) as u8,
-                    ((self.0 >> 32) & 0xff) as u8,
-                ])
-            }));
+            let bytes = [
+                (self.0 & 0xff) as u8,
+                ((self.0 >> 8) & 0xff) as u8,
+                ((self.0 >> 16) & 0xff) as u8,
+                ((self.0 >> 24) & 0xff) as u8,
+                ((self.0 >> 32) & 0xff) as u8,
+            ];
+            return Some(f(unsafe { std::str::from_utf8_unchecked(&bytes) }));
         }
     }
 

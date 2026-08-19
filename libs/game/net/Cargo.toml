@@ -1,9 +1,9 @@
 [package]
 name = "makepad-game-net"
 version = "0.1.0"
-edition = "2021"
+edition = "2024"
 description = "Host-authoritative LAN transport for Makepad Arcade (see game.md)"
-license = "MPL-2.0"
+license = "LGPL-3.0"
 
 [dependencies]
 makepad-micro-serde = { path = "../../micro_serde", version = "1.0.0" }

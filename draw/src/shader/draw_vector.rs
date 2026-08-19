@@ -744,8 +744,16 @@ impl DrawVector {
         let slot = self.acquire_geometry_slot(cx);
         let geometry_id = self.geometry_pool[slot].geometry_id();
         let mut packed = crate::vector::pack_vector_vertices(&self.acc_verts);
-        let mut indices = self.acc_indices.clone();
-        self.geometry_pool[slot].update_with_recycled_buffers(cx.cx.cx, &mut indices, &mut packed);
+        // Hand acc_indices directly to the recycler (as DrawPbr::flush does):
+        // update_with_recycled_buffers swaps our buffer into its own storage and
+        // clears what it returns, and begin() re-clears acc_indices next frame,
+        // so the prior `self.acc_indices.clone()` was a redundant per-flush
+        // allocation + memcpy proportional to the index count.
+        self.geometry_pool[slot].update_with_recycled_buffers(
+            cx.cx.cx,
+            &mut self.acc_indices,
+            &mut packed,
+        );
         self.geometry = Some(geometry_id);
         self.geometry_slot = Some(slot);
         self.draw_vars.geometry_id = Some(geometry_id);

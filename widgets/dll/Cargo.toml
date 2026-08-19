@@ -1,9 +1,9 @@
 [package]
 name = "makepad-widgets-dll"
 version = "2.0.0"
-edition = "2021"
+edition = "2024"
 description = "Dynamic library wrapper around makepad-widgets"
-license = "MPL-2.0"
+license = "LGPL-3.0"
 
 [lib]
 crate-type = ["dylib"]
