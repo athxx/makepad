@@ -295,13 +295,13 @@ script_mod! {
         font_code: TextStyle{
             font_size: theme.font_size_code
             font_family: FontFamily{
-                latin := FontMember{res: crate_resource("self:resources/LiberationMono-Regular.ttf") asc: 0.0 desc: 0.0}
+                latin := FontMember{res: system_font("mono", 400, false) asc: 0.0 desc: 0.0}
             }
             line_spacing: 1.35
         }
         font_icons: TextStyle{
             font_family: FontFamily{
-                latin := FontMember{res: crate_resource("self:resources/fa-solid-900.ttf") asc: 0.0 desc: 0.0}
+                latin := FontMember{res: system_font("ui", 400, false) asc: 0.0 desc: 0.0}
             }
             line_spacing: 1.2
         }

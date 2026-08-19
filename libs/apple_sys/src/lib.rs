@@ -258,7 +258,7 @@ unsafe extern "C" {
 // AVAssetReader / AVAssetWriter settings keys for the video FILE codec seam
 // (platform/src/os/apple/video_file_{encoder,decoder}.rs).
 #[link(name = "AVFoundation", kind = "framework")]
-extern "C" {
+unsafe extern "C" {
     pub static AVFileTypeMPEG4: ObjcId;
     pub static AVVideoCodecKey: ObjcId;
     pub static AVVideoWidthKey: ObjcId;
