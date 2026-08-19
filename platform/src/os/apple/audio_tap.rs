@@ -521,7 +521,7 @@ pub struct AudioBufferList {
 
 #[cfg(target_os = "macos")]
 #[link(name = "CoreMedia", kind = "framework")]
-extern "C" {
+unsafe extern "C" {
     fn CMSampleBufferGetFormatDescription(sbuf: ObjcId) -> ObjcId;
     fn CMSampleBufferGetNumSamples(sbuf: ObjcId) -> i64;
     fn CMAudioFormatDescriptionGetStreamBasicDescription(

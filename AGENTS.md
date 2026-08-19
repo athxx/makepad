@@ -1,10 +1,8 @@
 # Studio Remote Runbook
 
 ## Execution Policy
-- Use the Makepad Studio remote protocol by default when the agent needs to
-  inspect or automate a visual UI program. If the user explicitly asks for a
-  standalone/native run, honor that request and launch the release executable
-  directly from the relevant checkout instead.
+
+- Visual UI programs must be launched and controlled through the Makepad Studio remote protocol.
 - Always use release builds for runtime validation, profiling, benchmarks, timing checks, or any performance-sensitive command. Use `--release` unless the user explicitly asks for a debug build.
 - Do not use mount observation or runnable discovery from the bridge client. The bridge must not claim mount ownership from Studio desktop.
 - Do not launch UI programs with raw `cargo run`, `cargo makepad`, or ad hoc cargo invocation when using the Studio flow. For an explicitly requested standalone run, build with `cargo build --release` and launch the resulting executable from that checkout so its provenance is unambiguous.
@@ -19,6 +17,7 @@
 - When adding a new example crate, update both the Cargo workspace and `makepad.splash` so Studio exposes the new example as a runnable item.
 
 ## Assumptions
+
 - Studio is started manually by the user.
 - Studio remote target is `ip:port` only (no `http://`, no `ws://`), normally `127.0.0.1:8001`.
   - Use `127.0.0.1:8002` only if Studio reports fallback because `8001` is occupied.
@@ -31,6 +30,7 @@
 - Keep an interactive standalone app running when the user asks to play with it; use a separate self-terminating capture run only when a screenshot is also needed.
 
 ## Start Studio Remote
+
 - Command:
   - `target/release/cargo-makepad studio --studio=127.0.0.1:8001`
 - Send newline-delimited JSON requests on stdin.
@@ -39,6 +39,7 @@
 - Do not send `ObserveMount` from the bridge. It can take `primary` UI ownership for the mount and divert RunView/framebuffer traffic away from Studio desktop.
 
 ## Request Protocol (JSON Lines)
+
 - `{"ListBuilds":[]}`
 - `{"ClearBuild":{"build_id":[6]}}` stops a running build and immediately clears its Studio UI tabs; use this before rerunning the same app.
 - `{"StopBuild":{"build_id":[6]}}` stops/kills a running build but does not clear Studio tabs.
@@ -56,6 +57,7 @@
 - `{"ForwardToApp":{"build_id":[6],"msg_bin":[...]}}` (advanced; binary payload)
 
 ## `StudioToApp` API (Updated)
+
 - The studio remote bridge supports raw app event passthrough via `UIToStudio::ForwardToApp`.
 - Current `StudioToApp` variants include:
   - `Screenshot`, `WidgetTreeDump`, `KeepAlive`, `LiveChange`, `Swapchain`, `WindowGeomChange`, `Tick`
@@ -66,6 +68,7 @@
 - Use raw `StudioToApp` only for low-level event injection/debugging.
 
 ## Response Notes (Current)
+
 - Bridge stdout is filtered to: `Hello`, `Error`, `TextFileRead`, `TextFileRange`, `FindFileResults`, `SearchFileResults`, `Builds`, `RunItems`, `BuildStarted`, `BuildStopped`, `BuildCleared`, `AppStarted`, `RunViewCreated`, `QueryLogResults`, `Screenshot`, `WidgetTreeDump`, `WidgetQuery`, `QueryCancelled`.
 - `BuildCleared` is a Studio frontend cleanup signal routed to the primary UI for the build's mount; bridge clients should not wait for it before starting the next run.
 - `RunViewFrame` and the terminal stream are not exposed by the bridge.
@@ -79,6 +82,7 @@
 - `FindInFiles`/`SearchFiles` execution is worker-pooled in backend (not main dispatch thread).
 
 ## Recommended Control Flow
+
 1. Start studio remote process once.
 2. Determine the target runnable item name locally from the repo or from the user request.
 3. Call `ListBuilds` and find any existing build for the same runnable item.
@@ -92,11 +96,13 @@
 11. Keep control packets compact (`auto_dump:false` on click/type/return for low latency).
 
 ## `RunItem` Launch
+
 - `RunItem` executes a Studio-defined runnable item by name.
 - Use the runnable item name shown in Studio, not a Cargo package name.
 - `RunItem` does not implicitly replace an older build tab; agents should clear the old build themselves first with `ClearBuild`.
 
 ## One-Flow Input Burst
+
 - Send this as one stdin write (multiple JSON lines, no sleeps):
   - `Click` (input field center)
   - `TypeText`
@@ -104,11 +110,13 @@
 - Then request `WidgetTreeDump` or `Screenshot` to confirm.
 
 ## Coordinates
+
 - Use coordinates from dump as-is.
 - `W3` dump uses integer pixel coordinates in the same space expected by `Click`.
 - Do not apply extra DPI math in the agent loop.
 
 ## Reliability Notes
+
 - `Screenshot` can arrive before visible redraw after rapid input bursts.
   - If screenshot looks stale, request a follow-up `WidgetTreeDump`/`Screenshot`.
 - If input does nothing:
@@ -117,8 +125,8 @@
 - If request errors with no active websocket:
   - app is not connected yet; wait for startup completion and retry.
 
-
 ## CLAUDE.md Body
+
 The following is the current body of CLAUDE.md included verbatim for agent guidance parity.
 
 # Makepad Project Guide
@@ -156,12 +164,11 @@ When those non-UI tasks are used for runtime behavior or performance measurement
 [package]
 name = "makepad-example-myapp"
 version = "0.1.0"
-edition = "2021"
+edition = "2024"
 
 [dependencies]
 makepad-widgets = { path = "../../widgets" }
 ```
-
 
 ## Widgets DSL (script_mod!)
 
@@ -176,7 +183,7 @@ app_main!(App);
 
 script_mod!{
     use mod.prelude.widgets.*
-    
+
     load_all_resources() do #(App::script_component(vm)){
         ui: Root{
             main_window := Window{
@@ -262,16 +269,16 @@ pub struct AnimatedWidget {
 script_mod!{
     use mod.prelude.widgets_internal.*  // For internal widget definitions
     use mod.widgets.*                    // Access other widgets
-    
+
     // Register base widget (connects Rust struct to script)
     mod.widgets.MyWidgetBase = #(MyWidget::register_widget(vm))
-    
+
     // Create styled variant with defaults
     mod.widgets.MyWidget = set_type_default() do mod.widgets.MyWidgetBase{
         width: Fill
         height: Fit
         padding: theme.space_2
-        
+
         draw_bg +: {
             color: theme.color_bg_app
         }
@@ -281,22 +288,23 @@ script_mod!{
 
 ### Key Syntax Differences (Old vs New)
 
-| Old (live_design!) | New (script_mod!) |
-|-------------------|-------------------|
-| `<BaseWidget>` | `mod.widgets.BaseWidget{ }` |
-| `{{StructName}}` | `#(Struct::register_widget(vm))` |
-| `(THEME_COLOR_X)` | `theme.color_x` |
-| `<THEME_FONT>` | `theme.font_regular` |
-| `instance hover: 0.0` | `hover: instance(0.0)` |
-| `uniform color: #fff` | `color: uniform(#fff)` |
-| `draw_bg: { }` (replace) | `draw_bg +: { }` (merge) |
-| `default: off` | `default: @off` |
-| `fn pixel(self)` | `pixel: fn()` |
+| Old (live_design!)                | New (script_mod!)                     |
+| --------------------------------- | ------------------------------------- |
+| `<BaseWidget>`                    | `mod.widgets.BaseWidget{ }`           |
+| `{{StructName}}`                  | `#(Struct::register_widget(vm))`      |
+| `(THEME_COLOR_X)`                 | `theme.color_x`                       |
+| `<THEME_FONT>`                    | `theme.font_regular`                  |
+| `instance hover: 0.0`             | `hover: instance(0.0)`                |
+| `uniform color: #fff`             | `color: uniform(#fff)`                |
+| `draw_bg: { }` (replace)          | `draw_bg +: { }` (merge)              |
+| `default: off`                    | `default: @off`                       |
+| `fn pixel(self)`                  | `pixel: fn()`                         |
 | `item.apply_over(cx, live!{...})` | `script_apply_eval!(cx, item, {...})` |
 
 ### Runtime Property Updates with script_apply_eval!
 
 Use `script_apply_eval!` macro to dynamically update widget properties at runtime:
+
 ```rust
 // Old system (live! macro with apply_over)
 item.apply_over(cx, live!{
@@ -324,6 +332,7 @@ Note: In `script_apply_eval!`, use `#(expr)` for Rust expression interpolation i
 ### Theme Access
 
 Always use `theme.` prefix:
+
 ```rust
 color: theme.color_bg_app
 padding: theme.space_2
@@ -334,6 +343,7 @@ text_style: theme.font_regular
 ### Property Merging with `+:`
 
 The `+:` operator merges with parent instead of replacing:
+
 ```rust
 mod.widgets.MyButton = mod.widgets.Button{
     draw_bg +: {
@@ -409,7 +419,7 @@ color1.mix(color2, hover).mix(color3, down).mix(color4, focus)
 ```rust
 script_mod!{
     use mod.prelude.widgets.*
-    
+
     load_all_resources() do #(App::script_component(vm)){
         ui: Root{
             main_window := Window{
@@ -455,6 +465,7 @@ impl AppMain for App {
 ### Widget ID References
 
 Use `:=` for named widget instances:
+
 ```rust
 // In DSL
 my_button := Button{text: "Click"}
@@ -466,6 +477,7 @@ self.ui.button(ids!(my_button)).clicked(actions)
 ### Template Definitions in Dock
 
 Templates inside Dock are local; use `let` bindings at script level for reusable components:
+
 ```rust
 script_mod!{
     // Reusable at script level
@@ -474,7 +486,7 @@ script_mod!{
         height: Fill
         // ...
     }
-    
+
     // Use directly
     body +: {
         MyPanel{}  // Works because it's a let binding
@@ -501,7 +513,7 @@ impl Widget for CustomDraw {
         cx.end_turtle_with_area(&mut self.area);
         DrawStep::done()
     }
-    
+
     fn handle_event(&mut self, _cx: &mut Cx, _event: &Event, _scope: &mut Scope) {}
 }
 ```
@@ -509,6 +521,7 @@ impl Widget for CustomDraw {
 ### Script Object Storage: map vs vec
 
 In script objects, properties are stored in two different places:
+
 - **`map`**: Contains `key: value` pairs (regular properties)
 - **`vec`**: Contains named template items (via `:=` syntax)
 
@@ -525,7 +538,7 @@ my_list := PortalList {
     width: Fill
     height: Fill
     scroll_bar: mod.widgets.ScrollBar {}
-    
+
     // Templates (named with :=) - stored in templates HashMap, NOT struct fields
     Item := View {
         height: 40
@@ -538,6 +551,7 @@ my_list := PortalList {
 ```
 
 The templates are collected in `on_after_apply`:
+
 ```rust
 impl ScriptHook for PortalList {
     fn on_after_apply(&mut self, vm: &mut ScriptVm, apply: &Apply, scope: &mut Scope, value: ScriptValue) {
@@ -555,6 +569,7 @@ impl ScriptHook for PortalList {
 ```
 
 Then used during drawing:
+
 ```rust
 while let Some(item_id) = list.next_visible_item(cx) {
     let item = list.item(cx, item_id, id!(Item));
@@ -578,7 +593,7 @@ impl Widget for MyList {
         while let Some(item) = self.view.draw_walk(cx, scope, walk).step() {
             if let Some(mut list) = item.borrow_mut::<PortalList>() {
                 list.set_item_range(cx, 0, 100);  // 100 items
-                
+
                 while let Some(item_id) = list.next_visible_item(cx) {
                     let item = list.item(cx, item_id, id!(Item));
                     item.label(ids!(title)).set_text(cx, &format!("Item {}", item_id));
@@ -613,12 +628,12 @@ For custom draw types with shader fields, use `script_shader`:
 ```rust
 script_mod!{
     use mod.prelude.widgets_internal.*
-    
+
     // Register custom draw shader
     set_type_default() do #(DrawMyShader::script_shader(vm)){
         ..mod.draw.DrawQuad  // Inherit from DrawQuad
     }
-    
+
     // Register widget that uses it
     mod.widgets.MyWidgetBase = #(MyWidget::register_widget(vm))
 }
@@ -639,7 +654,7 @@ For structs that aren't full widgets but need script registration:
 script_mod!{
     // For components (not widgets)
     mod.widgets.MyComponentBase = #(MyComponent::script_component(vm))
-    
+
     // For widgets (implements Widget trait)
     mod.widgets.MyWidgetBase = #(MyWidget::register_widget(vm))
 }
@@ -648,6 +663,7 @@ script_mod!{
 ### Script Prelude Modules
 
 Two prelude modules available:
+
 - `mod.prelude.widgets_internal.*` - For internal widget library development
 - `mod.prelude.widgets.*` - For app development (includes all widgets)
 
@@ -655,7 +671,7 @@ Two prelude modules available:
 script_mod!{
     // App development - use widgets prelude
     use mod.prelude.widgets.*
-    
+
     // Or for widget library internals
     use mod.prelude.widgets_internal.*
     use mod.widgets.*
@@ -689,12 +705,13 @@ pub enum MyAction {
 When refactoring a multi-file project (like studio) from `live_design!` to `script_mod!`:
 
 1. **Each widget module** defines its own `script_mod!` that registers to `mod.widgets.*`:
+
 ```rust
 // In studio_editor.rs
 script_mod! {
     use mod.prelude.widgets_internal.*
     use mod.widgets.*
-    
+
     mod.widgets.StudioCodeEditorBase = #(StudioCodeEditor::register_widget(vm))
     mod.widgets.StudioCodeEditor = set_type_default() do mod.widgets.StudioCodeEditorBase {
         editor := CodeEditor {}
@@ -703,6 +720,7 @@ script_mod! {
 ```
 
 2. **The lib.rs** aggregates all widget script_mods:
+
 ```rust
 pub fn script_mod(vm: &mut ScriptVm) {
     crate::module1::script_mod(vm);
@@ -712,6 +730,7 @@ pub fn script_mod(vm: &mut ScriptVm) {
 ```
 
 3. **The app.rs** calls them in correct order:
+
 ```rust
 impl App {
     fn run(vm: &mut ScriptVm) -> Self {
@@ -724,11 +743,12 @@ impl App {
 ```
 
 4. **The app_ui.rs** can then use registered widgets:
+
 ```rust
 script_mod! {
     use mod.prelude.widgets.*
     // Now StudioCodeEditor is available from mod.widgets
-    
+
     let EditorContent = View {
         editor := StudioCodeEditor {}
     }
@@ -745,7 +765,7 @@ To share definitions between script_mod blocks in different files, store them in
 // In app_ui.rs - export to mod.widgets namespace
 script_mod! {
     use mod.prelude.widgets.*
-    
+
     // This makes AppUI available as mod.widgets.AppUI
     mod.widgets.AppUI = Window{
         // ...
@@ -756,7 +776,7 @@ script_mod! {
 script_mod! {
     use mod.prelude.widgets.*
     use mod.widgets.*  // Now AppUI is in scope
-    
+
     load_all_resources() do #(App::script_component(vm)){
         ui: Root{ AppUI{} }
     }
@@ -768,6 +788,7 @@ The `mod` object is the only way to share data between script_mod blocks.
 ### Prelude Alias Syntax
 
 When defining a prelude, use `name:mod.path` to create an alias:
+
 ```rust
 mod.prelude.widgets = {
     ..mod.std,           // Spread all of mod.std into scope
@@ -781,6 +802,7 @@ Without the alias (just `mod.theme,`), the module is included but has no name - 
 ### Let Bindings are Local
 
 `let` bindings in script_mod are LOCAL to that script_mod block. They cannot be:
+
 - Accessed from other script_mod blocks
 - Used as property values directly (e.g., `content +: MyLetBinding` won't work)
 
@@ -789,6 +811,7 @@ To use a `let` binding, instantiate it: `MyLetBinding{}` or store it in `mod.*` 
 ### Debug Logging with `~`
 
 Use `~expression` to log the value of an expression during script evaluation:
+
 ```rust
 script_mod! {
     ~mod.theme           // Logs the theme object
@@ -800,6 +823,7 @@ script_mod! {
 ### Common Pitfalls
 
 **Widget ID references**: Named widget instances use `:=` in the DSL and plain names in Rust id macros:
+
 - DSL defines `code_block := View { ... }` → Rust uses `id!(code_block)`
 - DSL defines `my_button := Button { ... }` → Rust uses `ids!(my_button)`
 
@@ -833,9 +857,10 @@ script_mod! {
 
 15. **Enums not exposed to script**: Some Rust enums like `PopupMenuPosition::BelowInput` may not be exposed to script. If you get "not found" errors on enum variants, just remove the property and use the default
 
-17. **Shader `mod` vs `modf`**: The Makepad shader language uses `modf(a, b)` for float modulo, NOT `mod(a, b)`. Similarly, use `atan2(y, x)` not `atan(y, x)` for two-argument arctangent. `atan(x)` (single arg) is also available. `fract(x)` works as expected.
+16. **Shader `mod` vs `modf`**: The Makepad shader language uses `modf(a, b)` for float modulo, NOT `mod(a, b)`. Similarly, use `atan2(y, x)` not `atan(y, x)` for two-argument arctangent. `atan(x)` (single arg) is also available. `fract(x)` works as expected.
 
-16. **Draw shader struct field ordering**: In `#[repr(C)]` draw shader structs that extend another draw shader via `#[deref]`, NEVER place `#[rust]` or other non-instance data AFTER `DrawVars` and the instance fields. The system uses an unsafe pointer trick in `DrawVars::as_slice()` that reads contiguously past the end of `dyn_instances` into the subsequent `#[live]` fields. Any non-instance data between `DrawVars` and the instance fields will corrupt the GPU instance buffer. Put all extra data (like `#[rust]`, `#[live]` non-instance fields such as resource handles, booleans, etc.) BEFORE the `#[deref]` field, and only `#[live]` instance fields (the ones that map to shader inputs) AFTER.
+17. **Draw shader struct field ordering**: In `#[repr(C)]` draw shader structs that extend another draw shader via `#[deref]`, NEVER place `#[rust]` or other non-instance data AFTER `DrawVars` and the instance fields. The system uses an unsafe pointer trick in `DrawVars::as_slice()` that reads contiguously past the end of `dyn_instances` into the subsequent `#[live]` fields. Any non-instance data between `DrawVars` and the instance fields will corrupt the GPU instance buffer. Put all extra data (like `#[rust]`, `#[live]` non-instance fields such as resource handles, booleans, etc.) BEFORE the `#[deref]` field, and only `#[live]` instance fields (the ones that map to shader inputs) AFTER.
+
     ```rust
     // CORRECT - non-instance data before deref, instance fields after
     #[derive(Script, ScriptHook)]

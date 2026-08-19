@@ -21,6 +21,20 @@ pub trait SerBin {
     }
 
     fn ser_bin(&self, s: &mut Vec<u8>);
+
+    /// Serialize a contiguous slice of `Self`. The default loops element by
+    /// element; scalar POD types override it to bulk-copy their little-endian
+    /// bytes in one `memcpy` (see [`impl_ser_de_bin_for`]). Called by the
+    /// `Vec<T>` / `[T]` / `[T; N]` impls so the fast path applies uniformly.
+    #[inline]
+    fn ser_bin_slice(slice: &[Self], s: &mut Vec<u8>)
+    where
+        Self: Sized,
+    {
+        for item in slice {
+            item.ser_bin(s);
+        }
+    }
 }
 
 pub trait DeBin: Sized {
@@ -29,6 +43,51 @@ pub trait DeBin: Sized {
     }
 
     fn de_bin(o: &mut usize, d: &[u8]) -> Result<Self, DeBinErr>;
+
+    /// Deserialize `count` contiguous `Self`, appending them to `out`. The
+    /// default loops element by element; scalar POD types override it to
+    /// bulk-copy from the input in one pass after a single bounds check.
+    /// Called by the `Vec<T>` impl (which has already read `count` from the
+    /// wire).
+    ///
+    /// The default path hardens against hostile lengths: `count` is
+    /// attacker-controlled, so the allocation is never sized directly from it,
+    /// and a count the buffer cannot possibly back is rejected before the loop
+    /// runs long. The POD overrides get an even stronger guarantee — an exact
+    /// byte-span bounds check — so they skip this probe.
+    #[inline]
+    fn de_bin_slice(count: usize, out: &mut Vec<Self>, o: &mut usize, d: &[u8]) -> Result<(), DeBinErr>
+    where
+        Self: Sized,
+    {
+        if count == 0 {
+            return Ok(());
+        }
+        // Never size the allocation from `count`. Every element that consumes
+        // at least one byte puts the true ceiling at the remaining byte count;
+        // measure the first element to tell that case apart from zero-sized
+        // ones, whose count is bounded only by an absolute cap.
+        out.reserve(count.min(1024));
+        let start = *o;
+        out.push(DeBin::de_bin(o, d)?);
+        let max_len = if *o == start {
+            DE_BIN_MAX_ZERO_SIZED_LEN
+        } else {
+            (d.len() - start) as u64
+        };
+        if count as u64 > max_len {
+            return Err(DeBinErr {
+                o: start,
+                l: 1,
+                s: d.len(),
+                msg: "Vec length exceeds buffer".to_string(),
+            });
+        }
+        for _ in 1..count {
+            out.push(DeBin::de_bin(o, d)?);
+        }
+        Ok(())
+    }
 }
 
 pub struct DeBinErr {
@@ -57,12 +116,33 @@ impl std::fmt::Debug for DeBinErr {
 macro_rules! impl_ser_de_bin_for {
     ($ty:ident) => {
         impl SerBin for $ty {
+            #[inline]
             fn ser_bin(&self, s: &mut Vec<u8>) {
                 s.extend_from_slice(&self.to_le_bytes());
+            }
+
+            // Bulk path for `Vec<$ty>` / `[$ty]` / `[$ty; N]`. On little-endian
+            // targets the in-memory representation of a `&[$ty]` is already the
+            // exact wire bytes (LE-packed, no padding for these scalars), so a
+            // single `extend_from_slice` reinterprets the slice as raw bytes and
+            // emits them in one `memcpy`. Big-endian falls back to the element
+            // loop so the wire format stays byte-identical across platforms.
+            #[cfg(target_endian = "little")]
+            #[inline]
+            fn ser_bin_slice(slice: &[$ty], s: &mut Vec<u8>) {
+                let byte_len = std::mem::size_of_val(slice);
+                // SAFETY: `$ty` is a plain scalar with no padding or invalid
+                // bit patterns; `slice.as_ptr()` is valid for `byte_len` bytes
+                // and `u8` has alignment 1, so the reinterpret is sound. The
+                // borrow of `slice` outlives the `extend_from_slice` call.
+                let bytes =
+                    unsafe { std::slice::from_raw_parts(slice.as_ptr() as *const u8, byte_len) };
+                s.extend_from_slice(bytes);
             }
         }
 
         impl DeBin for $ty {
+            #[inline]
             fn de_bin(o: &mut usize, d: &[u8]) -> Result<$ty, DeBinErr> {
                 let l = std::mem::size_of::<$ty>();
                 if *o + l > d.len() {
@@ -73,9 +153,58 @@ macro_rules! impl_ser_de_bin_for {
                         msg: format!("{}", stringify!($ty)),
                     });
                 }
-                let ret = $ty::from_le_bytes(d[*o..*o + l].try_into().unwrap());
+                // SAFETY: the bounds check above guarantees `d[*o..*o + l]` is in
+                // range; `read_unaligned` needs no alignment and copies `l` bytes.
+                let ret = unsafe {
+                    (d.as_ptr().add(*o) as *const $ty).read_unaligned()
+                };
+                // `from_le` is a no-op on LE and a byte swap on BE, matching the
+                // LE wire format on every platform (float types have no `from_le`
+                // so they take the branch below).
+                let ret = $ty::from_le_bytes(ret.to_le_bytes());
                 *o += l;
                 Ok(ret)
+            }
+
+            // Bulk path for `Vec<$ty>`. On little-endian targets the wire bytes
+            // are the in-memory representation, so after one bounds check we
+            // reserve exact capacity and `memcpy` straight into the vector's
+            // spare capacity, then set the length. Big-endian falls back to the
+            // element loop.
+            #[cfg(target_endian = "little")]
+            #[inline]
+            fn de_bin_slice(
+                count: usize,
+                out: &mut Vec<$ty>,
+                o: &mut usize,
+                d: &[u8],
+            ) -> Result<(), DeBinErr> {
+                let elem = std::mem::size_of::<$ty>();
+                // `count` is already validated against the remaining buffer by
+                // the caller (see the `Vec<T>` impl), but re-check the byte span
+                // here so this method is sound on its own terms.
+                let byte_len = count.checked_mul(elem).filter(|n| *o + *n <= d.len()).ok_or_else(
+                    || DeBinErr {
+                        o: *o,
+                        l: elem,
+                        s: d.len(),
+                        msg: concat!("Vec<", stringify!($ty), "> length exceeds buffer").to_string(),
+                    },
+                )?;
+                out.reserve(count);
+                // SAFETY: `reserve(count)` guarantees `count` slots of spare
+                // capacity past `out.len()` (which is 0 on the fast path); the
+                // source span `d[*o..*o + byte_len]` is in range by the check
+                // above; both are `#[repr]`-compatible scalar bytes and the
+                // regions do not overlap. We advance the length only after the
+                // copy succeeds.
+                unsafe {
+                    let dst = out.as_mut_ptr().add(out.len()) as *mut u8;
+                    std::ptr::copy_nonoverlapping(d.as_ptr().add(*o), dst, byte_len);
+                    out.set_len(out.len() + count);
+                }
+                *o += byte_len;
+                Ok(())
             }
         }
     };
@@ -126,6 +255,7 @@ impl DeBin for LiveId {
 }
 
 impl DeBin for u8 {
+    #[inline]
     fn de_bin(o: &mut usize, d: &[u8]) -> Result<u8, DeBinErr> {
         if *o + 1 > d.len() {
             return Err(DeBinErr {
@@ -139,15 +269,40 @@ impl DeBin for u8 {
         *o += 1;
         Ok(m)
     }
+
+    // Byte-width elements need no endianness handling, so the raw `memcpy`
+    // fast path is unconditional. See the scalar-macro impl for the SAFETY
+    // reasoning; here `elem == 1` so `byte_len == count`.
+    #[inline]
+    fn de_bin_slice(count: usize, out: &mut Vec<u8>, o: &mut usize, d: &[u8]) -> Result<(), DeBinErr> {
+        if o.checked_add(count).map_or(true, |end| end > d.len()) {
+            return Err(DeBinErr {
+                o: *o,
+                l: 1,
+                s: d.len(),
+                msg: "Vec<u8> length exceeds buffer".to_string(),
+            });
+        }
+        out.extend_from_slice(&d[*o..*o + count]);
+        *o += count;
+        Ok(())
+    }
 }
 
 impl SerBin for u8 {
+    #[inline]
     fn ser_bin(&self, s: &mut Vec<u8>) {
         s.push(*self);
+    }
+
+    #[inline]
+    fn ser_bin_slice(slice: &[u8], s: &mut Vec<u8>) {
+        s.extend_from_slice(slice);
     }
 }
 
 impl DeBin for i8 {
+    #[inline]
     fn de_bin(o: &mut usize, d: &[u8]) -> Result<i8, DeBinErr> {
         if *o + 1 > d.len() {
             return Err(DeBinErr {
@@ -161,11 +316,41 @@ impl DeBin for i8 {
         *o += 1;
         Ok(m as i8)
     }
+
+    #[inline]
+    fn de_bin_slice(count: usize, out: &mut Vec<i8>, o: &mut usize, d: &[u8]) -> Result<(), DeBinErr> {
+        if o.checked_add(count).map_or(true, |end| end > d.len()) {
+            return Err(DeBinErr {
+                o: *o,
+                l: 1,
+                s: d.len(),
+                msg: "Vec<i8> length exceeds buffer".to_string(),
+            });
+        }
+        out.reserve(count);
+        // SAFETY: `i8` and `u8` share layout; `reserve` backs `count` slots and
+        // the source span is bounds-checked above.
+        unsafe {
+            let dst = out.as_mut_ptr().add(out.len()) as *mut u8;
+            std::ptr::copy_nonoverlapping(d.as_ptr().add(*o), dst, count);
+            out.set_len(out.len() + count);
+        }
+        *o += count;
+        Ok(())
+    }
 }
 
 impl SerBin for i8 {
+    #[inline]
     fn ser_bin(&self, s: &mut Vec<u8>) {
         s.push(*self as u8);
+    }
+
+    #[inline]
+    fn ser_bin_slice(slice: &[i8], s: &mut Vec<u8>) {
+        // SAFETY: `i8` and `u8` have identical layout.
+        let bytes = unsafe { std::slice::from_raw_parts(slice.as_ptr() as *const u8, slice.len()) };
+        s.extend_from_slice(bytes);
     }
 }
 
@@ -236,12 +421,13 @@ impl<T> SerBin for Vec<T>
 where
     T: SerBin,
 {
+    #[inline]
     fn ser_bin(&self, s: &mut Vec<u8>) {
         let len = self.len() as u64;
         len.ser_bin(s);
-        for item in self {
-            item.ser_bin(s);
-        }
+        // POD element types override `ser_bin_slice` to bulk-copy; everything
+        // else falls back to the per-element loop in the default method.
+        T::ser_bin_slice(self, s);
     }
 }
 
@@ -254,35 +440,22 @@ impl<T> DeBin for Vec<T>
 where
     T: DeBin,
 {
+    #[inline]
     fn de_bin(o: &mut usize, d: &[u8]) -> Result<Vec<T>, DeBinErr> {
         let len: u64 = DeBin::de_bin(o, d)?;
-        if len == 0 {
-            return Ok(Vec::new());
-        }
-        // Untrusted input: `len` is attacker-controlled, so never size the
-        // allocation from it, and reject counts the buffer cannot back. Every
-        // element that consumes at least one byte puts the true ceiling at the
-        // remaining byte count; measure the first element to tell that case
-        // apart from zero-sized ones.
-        let mut out = Vec::with_capacity((len as usize).min(1024));
-        let start = *o;
-        out.push(DeBin::de_bin(o, d)?);
-        let max_len = if *o == start {
-            DE_BIN_MAX_ZERO_SIZED_LEN
-        } else {
-            (d.len() - start) as u64
-        };
-        if len > max_len {
-            return Err(DeBinErr {
-                o: start,
-                l: 1,
-                s: d.len(),
-                msg: "Vec length exceeds buffer".to_string(),
-            });
-        }
-        for _ in 1..len {
-            out.push(DeBin::de_bin(o, d)?)
-        }
+        // Untrusted input: `len` is attacker-controlled. `usize::try_from`
+        // rejects a length that can't index this platform, and the actual
+        // hostile-length hardening (never allocate from `len`, cap zero-sized
+        // elements, reject counts beyond the buffer) lives in `de_bin_slice`,
+        // whose POD overrides additionally do an exact byte-span check.
+        let count = usize::try_from(len).map_err(|_| DeBinErr {
+            o: *o,
+            l: 8,
+            s: d.len(),
+            msg: "Vec length exceeds usize".to_string(),
+        })?;
+        let mut out = Vec::new();
+        T::de_bin_slice(count, &mut out, o, d)?;
         Ok(out)
     }
 }
@@ -386,10 +559,10 @@ impl<T> SerBin for [T]
 where
     T: SerBin,
 {
+    #[inline]
     fn ser_bin(&self, s: &mut Vec<u8>) {
-        for item in self {
-            item.ser_bin(s);
-        }
+        // POD element types bulk-copy via the override; others loop.
+        T::ser_bin_slice(self, s);
     }
 }
 
@@ -755,6 +928,56 @@ mod hostile_input_tests {
         let d = only_len(u64::MAX);
         let mut o = 0;
         assert!(Vec::<Unit>::de_bin(&mut o, &d).is_err());
+    }
+
+    /// The bulk POD path must emit the exact same bytes as an element-by-element
+    /// encode — this is the wire-format-compatibility guarantee that downstream
+    /// crates (network + on-disk assets) depend on.
+    #[test]
+    fn pod_bulk_matches_element_wise_wire_format() {
+        macro_rules! check {
+            ($ty:ty, $vals:expr) => {{
+                let v: Vec<$ty> = $vals;
+                let bulk = v.serialize_bin();
+
+                // Reconstruct the reference bytes element by element.
+                let mut manual = Vec::new();
+                (v.len() as u64).ser_bin(&mut manual);
+                for it in &v {
+                    it.ser_bin(&mut manual);
+                }
+                assert_eq!(bulk, manual, "wire bytes diverge for {}", stringify!($ty));
+
+                // Round-trips through the bulk de path.
+                let back = Vec::<$ty>::deserialize_bin(&bulk).unwrap();
+                assert_eq!(back, v, "roundtrip mismatch for {}", stringify!($ty));
+            }};
+        }
+        check!(u8, vec![0, 1, 2, 254, 255]);
+        check!(i8, vec![-128, -1, 0, 1, 127]);
+        check!(u16, vec![0, 1, 0xffff, 0x1234]);
+        check!(i16, vec![i16::MIN, -1, 0, 1, i16::MAX]);
+        check!(u32, vec![0, 0xdead_beef, u32::MAX]);
+        check!(i32, vec![i32::MIN, -1, 0, i32::MAX]);
+        check!(u64, vec![0, 0x0123_4567_89ab_cdef, u64::MAX]);
+        check!(i64, vec![i64::MIN, -1, 0, i64::MAX]);
+        check!(f32, vec![0.0, -1.5, f32::consts_pi(), f32::MAX]);
+        check!(f64, vec![0.0, -2.5, f64::consts_pi(), f64::MAX]);
+    }
+
+    // Small helpers to avoid pulling in std::f32::consts into the macro.
+    trait ConstsPi {
+        fn consts_pi() -> Self;
+    }
+    impl ConstsPi for f32 {
+        fn consts_pi() -> f32 {
+            std::f32::consts::PI
+        }
+    }
+    impl ConstsPi for f64 {
+        fn consts_pi() -> f64 {
+            std::f64::consts::PI
+        }
     }
 
     #[test]

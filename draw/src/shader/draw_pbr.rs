@@ -1970,7 +1970,7 @@ impl DrawPbr {
             return Ok(handle);
         }
 
-        let gen = GeometryGen::from_cube_3d(
+        let r#gen = GeometryGen::from_cube_3d(
             1.0,
             1.0,
             1.0,
@@ -1978,7 +1978,7 @@ impl DrawPbr {
             segments as usize,
             segments as usize,
         );
-        let (positions, normals, uvs, indices) = Self::geometry_gen_to_pbr(&gen)?;
+        let (positions, normals, uvs, indices) = Self::geometry_gen_to_pbr(&r#gen)?;
         let handle = self.upload_indexed_triangles_mesh(
             cx,
             &positions,
@@ -2483,23 +2483,23 @@ impl DrawPbr {
         }
     }
 
-    fn geometry_gen_to_pbr(gen: &GeometryGen) -> Result<PbrMeshBuffers, String> {
-        if !gen.vertices.len().is_multiple_of(9) {
+    fn geometry_gen_to_pbr(r#gen: &GeometryGen) -> Result<PbrMeshBuffers, String> {
+        if !r#gen.vertices.len().is_multiple_of(9) {
             return Err(format!(
                 "expected GeometryGen vertex stride 9, got {} floats",
-                gen.vertices.len()
+                r#gen.vertices.len()
             ));
         }
-        let mut positions = Vec::with_capacity(gen.vertices.len() / 9);
-        let mut normals = Vec::with_capacity(gen.vertices.len() / 9);
-        let mut uvs = Vec::with_capacity(gen.vertices.len() / 9);
+        let mut positions = Vec::with_capacity(r#gen.vertices.len() / 9);
+        let mut normals = Vec::with_capacity(r#gen.vertices.len() / 9);
+        let mut uvs = Vec::with_capacity(r#gen.vertices.len() / 9);
 
-        for chunk in gen.vertices.chunks_exact(9) {
+        for chunk in r#gen.vertices.chunks_exact(9) {
             positions.push([chunk[0], chunk[1], chunk[2]]);
             normals.push([chunk[4], chunk[5], chunk[6]]);
             uvs.push([chunk[7], chunk[8]]);
         }
-        Ok((positions, normals, uvs, gen.indices.clone()))
+        Ok((positions, normals, uvs, r#gen.indices.clone()))
     }
 
     fn build_surface_mesh(seg_u: usize, seg_v: usize) -> PbrMeshBuffers {

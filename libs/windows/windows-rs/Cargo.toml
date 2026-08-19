@@ -10,8 +10,7 @@
 # See Cargo.toml.orig for the original contents.
 
 [package]
-edition = "2021"
-rust-version = "1.82"
+edition = "2024"
 name = "windows"
 version = "0.62.2"
 build = false
@@ -25,7 +24,7 @@ description = "Rust for Windows"
 documentation = "https://microsoft.github.io/windows-docs-rs/"
 readme = "readme.md"
 categories = ["os::windows-apis"]
-license = "MPL-2.0"
+license = "LGPL-3.0"
 repository = "https://github.com/microsoft/windows-rs"
 
 [package.metadata.docs.rs]

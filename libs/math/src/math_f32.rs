@@ -874,6 +874,362 @@ pub fn vec4(x:f32, y:f32, z:f32, w:f32)->Vec4f{
     Vec4f{x:x, y:y, z:z, w:w}
 }*/
 
+// Matrix storage is column-major. SIMD paths load columns directly from `Mat4f::v`
+// and write all result bytes into `MaybeUninit`, avoiding intermediate copies.
+// Exactly one backend compiles per target (the cfgs are mutually exclusive); this
+// is a source-level cross-platform choice, not a runtime branch or heap allocation.
+#[cfg(all(
+    any(target_arch = "x86", target_arch = "x86_64"),
+    target_feature = "sse2"
+))]
+mod mat4_simd {
+    #[cfg(target_arch = "x86")]
+    use core::arch::x86::*;
+    #[cfg(target_arch = "x86_64")]
+    use core::arch::x86_64::*;
+    use core::mem::MaybeUninit;
+
+    #[inline(always)]
+    fn madd(a: __m128, b: __m128, c: __m128) -> __m128 {
+        // SAFETY: SSE2 (and FMA when gated) is guaranteed by the enclosing cfg.
+        unsafe {
+            #[cfg(target_feature = "fma")]
+            {
+                _mm_fmadd_ps(a, b, c)
+            }
+            #[cfg(not(target_feature = "fma"))]
+            {
+                _mm_add_ps(_mm_mul_ps(a, b), c)
+            }
+        }
+    }
+
+    #[inline(always)]
+    fn combine(
+        a0: __m128,
+        a1: __m128,
+        a2: __m128,
+        a3: __m128,
+        x: f32,
+        y: f32,
+        z: f32,
+        w: f32,
+    ) -> __m128 {
+        // SAFETY: SSE2 is guaranteed by the enclosing cfg; madd handles its own.
+        unsafe {
+            let mut out = _mm_mul_ps(a0, _mm_set1_ps(x));
+            out = madd(a1, _mm_set1_ps(y), out);
+            out = madd(a2, _mm_set1_ps(z), out);
+            madd(a3, _mm_set1_ps(w), out)
+        }
+    }
+
+    #[inline(always)]
+    pub fn transform(m: &[f32; 16], x: f32, y: f32, z: f32, w: f32) -> [f32; 4] {
+        // SAFETY: `m` contains 16 contiguous f32 values; four loads stay in-bounds,
+        // and the single unaligned store initializes every element of `out`.
+        unsafe {
+            let p = m.as_ptr();
+            let a0 = _mm_loadu_ps(p);
+            let a1 = _mm_loadu_ps(p.add(4));
+            let a2 = _mm_loadu_ps(p.add(8));
+            let a3 = _mm_loadu_ps(p.add(12));
+            let value = combine(a0, a1, a2, a3, x, y, z, w);
+
+            let mut out = MaybeUninit::<[f32; 4]>::uninit();
+            _mm_storeu_ps(out.as_mut_ptr().cast::<f32>(), value);
+            out.assume_init()
+        }
+    }
+
+    #[inline(always)]
+    pub fn mul(a: &[f32; 16], b: &[f32; 16]) -> [f32; 16] {
+        // SAFETY: both inputs contain 16 contiguous f32 values. The fixed four-column
+        // loop only reads offsets 0..=15 and initializes all 16 output elements.
+        unsafe {
+            let ap = a.as_ptr();
+            let bp = b.as_ptr();
+            let a0 = _mm_loadu_ps(ap);
+            let a1 = _mm_loadu_ps(ap.add(4));
+            let a2 = _mm_loadu_ps(ap.add(8));
+            let a3 = _mm_loadu_ps(ap.add(12));
+
+            let mut out = MaybeUninit::<[f32; 16]>::uninit();
+            let dst = out.as_mut_ptr().cast::<f32>();
+            for column in 0..4 {
+                let offset = column * 4;
+                let result = combine(
+                    a0,
+                    a1,
+                    a2,
+                    a3,
+                    *bp.add(offset),
+                    *bp.add(offset + 1),
+                    *bp.add(offset + 2),
+                    *bp.add(offset + 3),
+                );
+                _mm_storeu_ps(dst.add(offset), result);
+            }
+            out.assume_init()
+        }
+    }
+
+    #[inline(always)]
+    pub fn transpose(m: &[f32; 16]) -> [f32; 16] {
+        // SAFETY: all four unaligned loads are within `m`, and the four stores
+        // initialize the complete output array before `assume_init`.
+        unsafe {
+            let p = m.as_ptr();
+            let c0 = _mm_loadu_ps(p);
+            let c1 = _mm_loadu_ps(p.add(4));
+            let c2 = _mm_loadu_ps(p.add(8));
+            let c3 = _mm_loadu_ps(p.add(12));
+
+            let t0 = _mm_unpacklo_ps(c0, c1);
+            let t1 = _mm_unpackhi_ps(c0, c1);
+            let t2 = _mm_unpacklo_ps(c2, c3);
+            let t3 = _mm_unpackhi_ps(c2, c3);
+            let r0 = _mm_movelh_ps(t0, t2);
+            let r1 = _mm_movehl_ps(t2, t0);
+            let r2 = _mm_movelh_ps(t1, t3);
+            let r3 = _mm_movehl_ps(t3, t1);
+
+            let mut out = MaybeUninit::<[f32; 16]>::uninit();
+            let dst = out.as_mut_ptr().cast::<f32>();
+            _mm_storeu_ps(dst, r0);
+            _mm_storeu_ps(dst.add(4), r1);
+            _mm_storeu_ps(dst.add(8), r2);
+            _mm_storeu_ps(dst.add(12), r3);
+            out.assume_init()
+        }
+    }
+}
+
+#[cfg(all(target_arch = "aarch64", target_feature = "neon"))]
+mod mat4_simd {
+    use core::{arch::aarch64::*, mem::MaybeUninit};
+
+    #[inline(always)]
+    fn combine(
+        a0: float32x4_t,
+        a1: float32x4_t,
+        a2: float32x4_t,
+        a3: float32x4_t,
+        x: f32,
+        y: f32,
+        z: f32,
+        w: f32,
+    ) -> float32x4_t {
+        // SAFETY: NEON is guaranteed by the enclosing cfg(target_feature = "neon").
+        unsafe {
+            let mut out = vmulq_f32(a0, vdupq_n_f32(x));
+            out = vfmaq_f32(out, a1, vdupq_n_f32(y));
+            out = vfmaq_f32(out, a2, vdupq_n_f32(z));
+            vfmaq_f32(out, a3, vdupq_n_f32(w))
+        }
+    }
+
+    #[inline(always)]
+    pub fn transform(m: &[f32; 16], x: f32, y: f32, z: f32, w: f32) -> [f32; 4] {
+        // SAFETY: NEON is enabled by the enclosing cfg; all loads are within the
+        // 16-element matrix and the store initializes the complete four-element output.
+        unsafe {
+            let p = m.as_ptr();
+            let value = combine(
+                vld1q_f32(p),
+                vld1q_f32(p.add(4)),
+                vld1q_f32(p.add(8)),
+                vld1q_f32(p.add(12)),
+                x,
+                y,
+                z,
+                w,
+            );
+            let mut out = MaybeUninit::<[f32; 4]>::uninit();
+            vst1q_f32(out.as_mut_ptr().cast::<f32>(), value);
+            out.assume_init()
+        }
+    }
+
+    #[inline(always)]
+    pub fn mul(a: &[f32; 16], b: &[f32; 16]) -> [f32; 16] {
+        // SAFETY: NEON is enabled by cfg. The fixed loop reads only matrix elements
+        // 0..=15 and writes all 16 output elements before `assume_init`.
+        unsafe {
+            let ap = a.as_ptr();
+            let bp = b.as_ptr();
+            let a0 = vld1q_f32(ap);
+            let a1 = vld1q_f32(ap.add(4));
+            let a2 = vld1q_f32(ap.add(8));
+            let a3 = vld1q_f32(ap.add(12));
+
+            let mut out = MaybeUninit::<[f32; 16]>::uninit();
+            let dst = out.as_mut_ptr().cast::<f32>();
+            for column in 0..4 {
+                let offset = column * 4;
+                let result = combine(
+                    a0,
+                    a1,
+                    a2,
+                    a3,
+                    *bp.add(offset),
+                    *bp.add(offset + 1),
+                    *bp.add(offset + 2),
+                    *bp.add(offset + 3),
+                );
+                vst1q_f32(dst.add(offset), result);
+            }
+            out.assume_init()
+        }
+    }
+
+    #[inline(always)]
+    pub fn transpose(m: &[f32; 16]) -> [f32; 16] {
+        [
+            m[0], m[4], m[8], m[12], m[1], m[5], m[9], m[13], m[2], m[6], m[10], m[14],
+            m[3], m[7], m[11], m[15],
+        ]
+    }
+}
+
+#[cfg(all(target_arch = "wasm32", target_feature = "simd128"))]
+mod mat4_simd {
+    use core::{arch::wasm32::*, mem::MaybeUninit};
+
+    #[inline(always)]
+    fn combine(
+        a0: v128,
+        a1: v128,
+        a2: v128,
+        a3: v128,
+        x: f32,
+        y: f32,
+        z: f32,
+        w: f32,
+    ) -> v128 {
+        // SAFETY: simd128 is guaranteed by the enclosing cfg.
+        unsafe {
+            let xy = f32x4_add(
+                f32x4_mul(a0, f32x4_splat(x)),
+                f32x4_mul(a1, f32x4_splat(y)),
+            );
+            let zw = f32x4_add(
+                f32x4_mul(a2, f32x4_splat(z)),
+                f32x4_mul(a3, f32x4_splat(w)),
+            );
+            f32x4_add(xy, zw)
+        }
+    }
+
+    #[inline(always)]
+    pub fn transform(m: &[f32; 16], x: f32, y: f32, z: f32, w: f32) -> [f32; 4] {
+        // SAFETY: simd128 is enabled by cfg; v128_load/store permit unaligned access,
+        // and all pointers cover complete 16-byte regions inside the arrays.
+        unsafe {
+            let p = m.as_ptr().cast::<v128>();
+            let value = combine(
+                v128_load(p),
+                v128_load(p.add(1)),
+                v128_load(p.add(2)),
+                v128_load(p.add(3)),
+                x,
+                y,
+                z,
+                w,
+            );
+            let mut out = MaybeUninit::<[f32; 4]>::uninit();
+            v128_store(out.as_mut_ptr().cast::<v128>(), value);
+            out.assume_init()
+        }
+    }
+
+    #[inline(always)]
+    pub fn mul(a: &[f32; 16], b: &[f32; 16]) -> [f32; 16] {
+        // SAFETY: simd128 is enabled by cfg. The four fixed columns stay within both
+        // input arrays and initialize the entire output before `assume_init`.
+        unsafe {
+            let ap = a.as_ptr().cast::<v128>();
+            let bp = b.as_ptr();
+            let a0 = v128_load(ap);
+            let a1 = v128_load(ap.add(1));
+            let a2 = v128_load(ap.add(2));
+            let a3 = v128_load(ap.add(3));
+
+            let mut out = MaybeUninit::<[f32; 16]>::uninit();
+            let dst = out.as_mut_ptr().cast::<v128>();
+            for column in 0..4 {
+                let offset = column * 4;
+                let result = combine(
+                    a0,
+                    a1,
+                    a2,
+                    a3,
+                    *bp.add(offset),
+                    *bp.add(offset + 1),
+                    *bp.add(offset + 2),
+                    *bp.add(offset + 3),
+                );
+                v128_store(dst.add(column), result);
+            }
+            out.assume_init()
+        }
+    }
+
+    #[inline(always)]
+    pub fn transpose(m: &[f32; 16]) -> [f32; 16] {
+        // Four fixed lane shuffles are typically emitted by LLVM for this form.
+        [
+            m[0], m[4], m[8], m[12], m[1], m[5], m[9], m[13], m[2], m[6], m[10], m[14],
+            m[3], m[7], m[11], m[15],
+        ]
+    }
+}
+
+#[cfg(not(any(
+    all(
+        any(target_arch = "x86", target_arch = "x86_64"),
+        target_feature = "sse2"
+    ),
+    all(target_arch = "aarch64", target_feature = "neon"),
+    all(target_arch = "wasm32", target_feature = "simd128")
+)))]
+mod mat4_simd {
+    #[inline(always)]
+    pub fn transform(m: &[f32; 16], x: f32, y: f32, z: f32, w: f32) -> [f32; 4] {
+        [
+            m[0] * x + m[4] * y + m[8] * z + m[12] * w,
+            m[1] * x + m[5] * y + m[9] * z + m[13] * w,
+            m[2] * x + m[6] * y + m[10] * z + m[14] * w,
+            m[3] * x + m[7] * y + m[11] * z + m[15] * w,
+        ]
+    }
+
+    #[inline(always)]
+    pub fn mul(a: &[f32; 16], b: &[f32; 16]) -> [f32; 16] {
+        let mut out = [0.0; 16];
+        for column in 0..4 {
+            let bi = column * 4;
+            let b0 = b[bi];
+            let b1 = b[bi + 1];
+            let b2 = b[bi + 2];
+            let b3 = b[bi + 3];
+            out[bi] = a[0] * b0 + a[4] * b1 + a[8] * b2 + a[12] * b3;
+            out[bi + 1] = a[1] * b0 + a[5] * b1 + a[9] * b2 + a[13] * b3;
+            out[bi + 2] = a[2] * b0 + a[6] * b1 + a[10] * b2 + a[14] * b3;
+            out[bi + 3] = a[3] * b0 + a[7] * b1 + a[11] * b2 + a[15] * b3;
+        }
+        out
+    }
+
+    #[inline(always)]
+    pub fn transpose(m: &[f32; 16]) -> [f32; 16] {
+        [
+            m[0], m[4], m[8], m[12], m[1], m[5], m[9], m[13], m[2], m[6], m[10], m[14],
+            m[3], m[7], m[11], m[15],
+        ]
+    }
+}
+
 impl Mat4f {
     pub const fn identity() -> Mat4f {
         Mat4f {
@@ -883,13 +1239,10 @@ impl Mat4f {
         }
     }
 
+    #[inline(always)]
     pub fn transpose(&self) -> Mat4f {
         Mat4f {
-            v: [
-                self.v[0], self.v[4], self.v[8], self.v[12], self.v[1], self.v[5], self.v[9],
-                self.v[13], self.v[2], self.v[6], self.v[10], self.v[14], self.v[3], self.v[7],
-                self.v[11], self.v[15],
-            ],
+            v: mat4_simd::transpose(&self.v),
         }
     }
 
@@ -1169,13 +1522,14 @@ impl Mat4f {
         }
     }
 
+    #[inline(always)]
     pub fn transform_vec4(&self, v: Vec4f) -> Vec4f {
-        let m = &self.v;
+        let out = mat4_simd::transform(&self.v, v.x, v.y, v.z, v.w);
         Vec4f {
-            x: m[0] * v.x + m[4] * v.y + m[8] * v.z + m[12] * v.w,
-            y: m[1] * v.x + m[5] * v.y + m[9] * v.z + m[13] * v.w,
-            z: m[2] * v.x + m[6] * v.y + m[10] * v.z + m[14] * v.w,
-            w: m[3] * v.x + m[7] * v.y + m[11] * v.z + m[15] * v.w,
+            x: out[0],
+            y: out[1],
+            z: out[2],
+            w: out[3],
         }
     }
 
@@ -1206,80 +1560,10 @@ impl Mat4f {
         }
     }
 
+    #[inline(always)]
     pub fn mul(a: &Mat4f, b: &Mat4f) -> Mat4f {
-        // Swap so that mul(a, b) computes standard a * b (was previously b * a).
-        let (a, b) = (&b.v, &a.v);
-        #[inline]
-        fn d(i: &[f32; 16], x: usize, y: usize) -> f32 {
-            i[x + 4 * y]
-        }
         Mat4f {
-            v: [
-                d(a, 0, 0) * d(b, 0, 0)
-                    + d(a, 1, 0) * d(b, 0, 1)
-                    + d(a, 2, 0) * d(b, 0, 2)
-                    + d(a, 3, 0) * d(b, 0, 3),
-                d(a, 0, 0) * d(b, 1, 0)
-                    + d(a, 1, 0) * d(b, 1, 1)
-                    + d(a, 2, 0) * d(b, 1, 2)
-                    + d(a, 3, 0) * d(b, 1, 3),
-                d(a, 0, 0) * d(b, 2, 0)
-                    + d(a, 1, 0) * d(b, 2, 1)
-                    + d(a, 2, 0) * d(b, 2, 2)
-                    + d(a, 3, 0) * d(b, 2, 3),
-                d(a, 0, 0) * d(b, 3, 0)
-                    + d(a, 1, 0) * d(b, 3, 1)
-                    + d(a, 2, 0) * d(b, 3, 2)
-                    + d(a, 3, 0) * d(b, 3, 3),
-                d(a, 0, 1) * d(b, 0, 0)
-                    + d(a, 1, 1) * d(b, 0, 1)
-                    + d(a, 2, 1) * d(b, 0, 2)
-                    + d(a, 3, 1) * d(b, 0, 3),
-                d(a, 0, 1) * d(b, 1, 0)
-                    + d(a, 1, 1) * d(b, 1, 1)
-                    + d(a, 2, 1) * d(b, 1, 2)
-                    + d(a, 3, 1) * d(b, 1, 3),
-                d(a, 0, 1) * d(b, 2, 0)
-                    + d(a, 1, 1) * d(b, 2, 1)
-                    + d(a, 2, 1) * d(b, 2, 2)
-                    + d(a, 3, 1) * d(b, 2, 3),
-                d(a, 0, 1) * d(b, 3, 0)
-                    + d(a, 1, 1) * d(b, 3, 1)
-                    + d(a, 2, 1) * d(b, 3, 2)
-                    + d(a, 3, 1) * d(b, 3, 3),
-                d(a, 0, 2) * d(b, 0, 0)
-                    + d(a, 1, 2) * d(b, 0, 1)
-                    + d(a, 2, 2) * d(b, 0, 2)
-                    + d(a, 3, 2) * d(b, 0, 3),
-                d(a, 0, 2) * d(b, 1, 0)
-                    + d(a, 1, 2) * d(b, 1, 1)
-                    + d(a, 2, 2) * d(b, 1, 2)
-                    + d(a, 3, 2) * d(b, 1, 3),
-                d(a, 0, 2) * d(b, 2, 0)
-                    + d(a, 1, 2) * d(b, 2, 1)
-                    + d(a, 2, 2) * d(b, 2, 2)
-                    + d(a, 3, 2) * d(b, 2, 3),
-                d(a, 0, 2) * d(b, 3, 0)
-                    + d(a, 1, 2) * d(b, 3, 1)
-                    + d(a, 2, 2) * d(b, 3, 2)
-                    + d(a, 3, 2) * d(b, 3, 3),
-                d(a, 0, 3) * d(b, 0, 0)
-                    + d(a, 1, 3) * d(b, 0, 1)
-                    + d(a, 2, 3) * d(b, 0, 2)
-                    + d(a, 3, 3) * d(b, 0, 3),
-                d(a, 0, 3) * d(b, 1, 0)
-                    + d(a, 1, 3) * d(b, 1, 1)
-                    + d(a, 2, 3) * d(b, 1, 2)
-                    + d(a, 3, 3) * d(b, 1, 3),
-                d(a, 0, 3) * d(b, 2, 0)
-                    + d(a, 1, 3) * d(b, 2, 1)
-                    + d(a, 2, 3) * d(b, 2, 2)
-                    + d(a, 3, 3) * d(b, 2, 3),
-                d(a, 0, 3) * d(b, 3, 0)
-                    + d(a, 1, 3) * d(b, 3, 1)
-                    + d(a, 2, 3) * d(b, 3, 2)
-                    + d(a, 3, 3) * d(b, 3, 3),
-            ],
+            v: mat4_simd::mul(&a.v, &b.v),
         }
     }
 

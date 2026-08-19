@@ -239,9 +239,9 @@ impl<'a> Deref for CowStr<'a> {
 
     fn deref(&self) -> &str {
         match self {
-            CowStr::Boxed(ref b) => b,
+            CowStr::Boxed(b) => b,
             CowStr::Borrowed(b) => b,
-            CowStr::Inlined(ref s) => s.deref(),
+            CowStr::Inlined(s) => s.deref(),
         }
     }
 }

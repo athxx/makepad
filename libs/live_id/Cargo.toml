@@ -2,11 +2,11 @@
 name = "makepad-live-id"
 version = "1.0.0"
 authors = ["Makepad <info@makepad.nl>"]
-edition = "2021"
-description = "Makepad live id symbol interning"
-license = "MPL-2.0"
-homepage = "https://github.com/makepad/makepad/"
-repository = "https://github.com/makepad/makepad/"
+edition = "2024"
+description = "Viso live id symbol interning"
+license = "LGPL-3.0"
+homepage = "https://github.com/visokit/viso/"
+repository = "https://github.com/visokit/viso/"
 metadata.makepad-auto-version = "Fjf_rJTOgvZXwyU7Yb-CZMF6Hmo="
 
 [dependencies]

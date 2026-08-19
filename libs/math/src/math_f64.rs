@@ -7,6 +7,7 @@ use {
     std::{fmt, ops},
 };
 
+#[repr(transparent)]
 pub struct PrettyPrintedF64(pub f64);
 
 impl fmt::Display for PrettyPrintedF64 {
@@ -19,6 +20,7 @@ impl fmt::Display for PrettyPrintedF64 {
     }
 }
 
+#[repr(C)]
 #[derive(Clone, Copy, Default, Debug, PartialEq)]
 pub struct Rect {
     pub pos: Vec2d,
@@ -47,10 +49,17 @@ impl Rect {
         }
     }
 
+    #[inline]
     pub fn scale_and_shift(&self, center: Vec2d, scale: f64, shift: Vec2d) -> Rect {
         Rect {
-            pos: (self.pos - center) * scale + center + shift,
-            size: self.size * scale,
+            pos: Vec2d {
+                x: (self.pos.x - center.x) * scale + center.x + shift.x,
+                y: (self.pos.y - center.y) * scale + center.y + shift.y,
+            },
+            size: Vec2d {
+                x: self.size.x * scale,
+                y: self.size.y * scale,
+            },
         }
     }
 
@@ -95,29 +104,37 @@ impl Rect {
         }
     }
 
+    #[inline]
     pub fn hull(&self, other: Rect) -> Rect {
-        let otherpos = other.pos;
-        let otherfarside = other.pos + other.size;
-        let farside = self.pos + self.size;
-        let mut finalpos = self.pos;
-        let mut finalfarside = farside;
-        if otherpos.x < finalpos.x {
-            finalpos.x = otherpos.x
+        let self_x2 = self.pos.x + self.size.x;
+        let self_y2 = self.pos.y + self.size.y;
+        let other_x2 = other.pos.x + other.size.x;
+        let other_y2 = other.pos.y + other.size.y;
+
+        let x1 = if other.pos.x < self.pos.x {
+            other.pos.x
+        } else {
+            self.pos.x
         };
-        if otherpos.y < finalpos.y {
-            finalpos.y = otherpos.y
+        let y1 = if other.pos.y < self.pos.y {
+            other.pos.y
+        } else {
+            self.pos.y
+        };
+        let x2 = if other_x2 > self_x2 {
+            other_x2
+        } else {
+            self_x2
+        };
+        let y2 = if other_y2 > self_y2 {
+            other_y2
+        } else {
+            self_y2
         };
 
-        if otherfarside.x > finalfarside.x {
-            finalfarside.x = otherfarside.x
-        };
-        if otherfarside.y > finalfarside.y {
-            finalfarside.y = otherfarside.y
-        };
-        let finalsize = finalfarside - finalpos;
         Rect {
-            pos: finalpos,
-            size: finalsize,
+            pos: dvec2(x1, y1),
+            size: dvec2(x2 - x1, y2 - y1),
         }
     }
 
@@ -188,6 +205,7 @@ impl Rect {
     }
 }
 
+#[repr(C)]
 #[derive(Clone, Copy, Default, Debug, PartialEq)]
 pub struct Vec4d {
     pub x: f64,
@@ -197,6 +215,7 @@ pub struct Vec4d {
 }
 pub type DVec4 = Vec4d;
 
+#[repr(C)]
 #[derive(Clone, Copy, Default, Debug, PartialEq)]
 pub struct Vec3d {
     pub x: f64,
@@ -205,6 +224,7 @@ pub struct Vec3d {
 }
 pub type DVec3 = Vec3d;
 
+#[repr(C)]
 #[derive(Clone, Copy, Default, Debug, PartialEq)]
 pub struct Vec2d {
     pub x: f64,
@@ -327,7 +347,7 @@ impl Vec2d {
     }
 
     pub fn length(&self) -> f64 {
-        (self.x * self.x + self.y * self.y).sqrt()
+        self.lengthsquared().sqrt()
     }
     pub fn normalize(&self) -> Vec2d {
         let l = self.length();

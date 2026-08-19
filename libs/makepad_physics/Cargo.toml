@@ -1,9 +1,9 @@
 [package]
 name = "makepad-physics"
 version = "0.1.0"
-edition = "2021"
+edition = "2024"
 description = "Deterministic physics engine for networked synced simulations"
-license = "MPL-2.0"
+license = "LGPL-3.0"
 
 [dependencies]
 makepad-math = { path = "../math" }

@@ -10,8 +10,7 @@
 # See Cargo.toml.orig for the original contents.
 
 [package]
-edition = "2021"
-rust-version = "1.61"
+edition = "2024"
 name = "memchr"
 version = "2.7.6"
 authors = [

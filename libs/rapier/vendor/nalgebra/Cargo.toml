@@ -1,6 +1,5 @@
 [package]
 edition = "2024"
-rust-version = "1.87.0"
 name = "nalgebra"
 version = "0.34.1"
 authors = ["Sébastien Crozet <developer@crozet.re>"]

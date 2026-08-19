@@ -320,12 +320,12 @@ fn drive<T: FromData>(
 
 fn apply_subtable(kind: &morx::SubtableKind, ac: &mut hb_aat_apply_context_t) {
     match kind {
-        morx::SubtableKind::Rearrangement(ref table) => {
+        morx::SubtableKind::Rearrangement(table) => {
             let mut c = RearrangementCtx { start: 0, end: 0 };
 
             drive::<()>(table, &mut c, ac);
         }
-        morx::SubtableKind::Contextual(ref table) => {
+        morx::SubtableKind::Contextual(table) => {
             let mut c = ContextualCtx {
                 mark_set: false,
                 face_if_has_glyph_classes:
@@ -337,7 +337,7 @@ fn apply_subtable(kind: &morx::SubtableKind, ac: &mut hb_aat_apply_context_t) {
 
             drive::<morx::ContextualEntryData>(&table.state, &mut c, ac);
         }
-        morx::SubtableKind::Ligature(ref table) => {
+        morx::SubtableKind::Ligature(table) => {
             let mut c = LigatureCtx {
                 table,
                 match_length: 0,
@@ -346,7 +346,7 @@ fn apply_subtable(kind: &morx::SubtableKind, ac: &mut hb_aat_apply_context_t) {
 
             drive::<u16>(&table.state, &mut c, ac);
         }
-        morx::SubtableKind::NonContextual(ref lookup) => {
+        morx::SubtableKind::NonContextual(lookup) => {
             let face_if_has_glyph_classes =
                 matches!(ac.face.tables().gdef, Some(gdef) if gdef.has_glyph_classes())
                     .then_some(ac.face);
@@ -394,7 +394,7 @@ fn apply_subtable(kind: &morx::SubtableKind, ac: &mut hb_aat_apply_context_t) {
                 }
             }
         }
-        morx::SubtableKind::Insertion(ref table) => {
+        morx::SubtableKind::Insertion(table) => {
             let mut c = InsertionCtx {
                 mark: 0,
                 glyphs: table.glyphs,

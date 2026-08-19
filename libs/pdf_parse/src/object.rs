@@ -5,12 +5,12 @@ use std::fmt;
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
 pub struct ObjRef {
     pub num: u32,
-    pub gen: u16,
+    pub r#gen: u16,
 }
 
 impl fmt::Display for ObjRef {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
-        write!(f, "{} {} R", self.num, self.gen)
+        write!(f, "{} {} R", self.num, self.r#gen)
     }
 }
 

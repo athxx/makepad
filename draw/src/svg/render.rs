@@ -6,6 +6,7 @@ use makepad_svg::animate::{
 use makepad_svg::document::*;
 use makepad_svg::units::viewbox_transform;
 use makepad_svg::{VectorPaint, VectorPath};
+use std::borrow::Cow;
 use std::collections::HashMap;
 
 // Re-import path commands for shadow offset manipulation
@@ -162,7 +163,18 @@ fn render_use(
     dv.cur_use_color = prev_use_color;
 }
 
-fn apply_animated_style(style: &SvgStyle, animations: &[SvgAnimate], time: f32) -> SvgStyle {
+fn apply_animated_style<'a>(
+    style: &'a SvgStyle,
+    animations: &[SvgAnimate],
+    time: f32,
+) -> Cow<'a, SvgStyle> {
+    // Static (unanimated) nodes are the common case: borrow the style rather
+    // than clone it. A clone of the ~15-field SvgStyle is a stack memcpy plus,
+    // when `filter`/`stroke_dasharray` are set, heap allocations — all wasted
+    // when there is nothing to animate.
+    if animations.is_empty() {
+        return Cow::Borrowed(style);
+    }
     let mut s = style.clone();
     for anim in animations {
         match anim.attribute {
@@ -199,7 +211,7 @@ fn apply_animated_style(style: &SvgStyle, animations: &[SvgAnimate], time: f32) 
             _ => {}
         }
     }
-    s
+    Cow::Owned(s)
 }
 
 fn render_path(
@@ -242,7 +254,7 @@ fn render_path(
     emit_shape(
         dv,
         |dv| emit_path(dv, use_path, &xf),
-        &style,
+        &*style,
         defs,
         &xf,
         &bbox,
@@ -278,7 +290,7 @@ fn render_rect(
                 emit_rect(dv, rect.x, rect.y, rect.width, rect.height, &xf);
             }
         },
-        &style,
+        &*style,
         defs,
         &xf,
         &bbox,
@@ -332,7 +344,7 @@ fn render_circle(
     emit_shape(
         dv,
         |dv| emit_ellipse(dv, cx, cy, r, r, &xf),
-        &style,
+        &*style,
         defs,
         &xf,
         &bbox,
@@ -366,7 +378,7 @@ fn render_ellipse(
     emit_shape(
         dv,
         |dv| emit_ellipse(dv, ell.cx, ell.cy, ell.rx, ell.ry, &xf),
-        &style,
+        &*style,
         defs,
         &xf,
         &bbox,
@@ -405,7 +417,7 @@ fn render_line(
             dv.move_to(x1, y1);
             dv.line_to(x2, y2);
         },
-        &style,
+        &*style,
         defs,
         &xf,
         &bbox,
@@ -434,7 +446,7 @@ fn render_polyline(
     emit_shape(
         dv,
         |dv| emit_points(dv, &poly.points, false, &xf),
-        &style,
+        &*style,
         defs,
         &xf,
         &bbox,
@@ -463,7 +475,7 @@ fn render_polygon(
     emit_shape(
         dv,
         |dv| emit_points(dv, &poly.points, true, &xf),
-        &style,
+        &*style,
         defs,
         &xf,
         &bbox,

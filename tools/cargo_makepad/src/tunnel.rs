@@ -175,7 +175,7 @@ mod process_group {
             if self.0 == 0 {
                 return;
             }
-            extern "C" {
+            unsafe extern "C" {
                 fn kill(pid: i32, sig: i32) -> i32;
             }
             const SIGKILL: i32 = 9;
@@ -190,7 +190,7 @@ mod process_group {
         // This way all children it spawns (rustc, etc.) inherit the group.
         unsafe {
             cmd.pre_exec(|| {
-                extern "C" {
+                unsafe extern "C" {
                     fn setpgid(pid: i32, pgid: i32) -> i32;
                 }
                 setpgid(0, 0);

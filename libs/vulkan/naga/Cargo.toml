@@ -10,8 +10,7 @@
 # See Cargo.toml.orig for the original contents.
 
 [package]
-edition = "2021"
-rust-version = "1.82.0"
+edition = "2024"
 name = "naga"
 version = "27.0.3"
 authors = ["gfx-rs developers"]
@@ -35,7 +34,7 @@ keywords = [
     "GLSL",
     "MSL",
 ]
-license = "MPL-2.0"
+license = "LGPL-3.0"
 repository = "https://github.com/gfx-rs/wgpu"
 
 [package.metadata.docs.rs]

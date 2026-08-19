@@ -768,7 +768,7 @@ unsafe fn open_pty(cols: u16, rows: u16) -> io::Result<(i32, i32)> {
 #[cfg(any(target_os = "macos", target_os = "linux"))]
 mod libc_ffi {
     #[cfg_attr(any(target_os = "macos", target_os = "linux"), link(name = "util"))]
-    extern "C" {
+    unsafe extern "C" {
         pub fn openpty(
             amaster: *mut i32,
             aslave: *mut i32,
@@ -778,7 +778,7 @@ mod libc_ffi {
         ) -> i32;
     }
 
-    extern "C" {
+    unsafe extern "C" {
         pub fn close(fd: i32) -> i32;
         pub fn read(fd: i32, buf: *mut std::ffi::c_void, count: usize) -> isize;
         pub fn write(fd: i32, buf: *const std::ffi::c_void, count: usize) -> isize;

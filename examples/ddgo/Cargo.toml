@@ -1,9 +1,9 @@
 [package]
 name = "makepad-example-ddgo"
 version = "1.0.0"
-edition = "2021"
+edition = "2024"
 description = "Splash-only DuckDuckGo image search example"
-license = "MPL-2.0"
+license = "LGPL-3.0"
 
 [dependencies]
 makepad-widgets = { path = "../../widgets", version = "2.0.0" }

@@ -1,9 +1,9 @@
 [package]
 name = "makepad-network"
 version = "1.0.0"
-edition = "2021"
+edition = "2024"
 description = "Networking runtime for Makepad UI and CLI apps"
-license = "MPL-2.0"
+license = "LGPL-3.0"
 
 [features]
 default = []

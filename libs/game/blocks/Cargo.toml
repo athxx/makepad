@@ -1,9 +1,9 @@
 [package]
 name = "makepad-game-blocks"
 version = "0.1.0"
-edition = "2021"
+edition = "2024"
 description = "High-level game building blocks (cars, characters, planes, brains, race kit) for Makepad Arcade"
-license = "MPL-2.0"
+license = "LGPL-3.0"
 
 [dependencies]
 makepad-game-math = { path = "../math" }

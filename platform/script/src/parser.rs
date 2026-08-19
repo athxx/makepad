@@ -1972,7 +1972,7 @@ impl ScriptParser {
                     return 1;
                 } else if tok.is_close_curly() {
                     // Nested pattern complete - bindings were collected in NestedObjectEl
-                    if let Some(NestedPattern::Object(ref bindings)) = self.nested_patterns.last() {
+                    if let Some(NestedPattern::Object(bindings)) = self.nested_patterns.last() {
                         if bindings.len() == nested_count as usize {
                             // Pattern is complete, update the placeholder with the pattern index
                             let pattern_idx = self.nested_patterns.len() - 1;
@@ -2012,7 +2012,7 @@ impl ScriptParser {
                         .push(NestedPattern::Object(vec![binding_id]));
                 } else {
                     // Add to existing pattern
-                    if let Some(NestedPattern::Object(ref mut bindings)) =
+                    if let Some(NestedPattern::Object(bindings)) =
                         self.nested_patterns.last_mut()
                     {
                         bindings.push(binding_id);
@@ -2088,7 +2088,7 @@ impl ScriptParser {
                     return 1;
                 } else if tok.is_close_square() {
                     // Nested pattern complete
-                    if let Some(NestedPattern::Array(ref bindings)) = self.nested_patterns.last() {
+                    if let Some(NestedPattern::Array(bindings)) = self.nested_patterns.last() {
                         if bindings.len() == nested_count as usize {
                             let pattern_idx = self.nested_patterns.len() - 1;
                             let placeholder_pos =
@@ -2124,7 +2124,7 @@ impl ScriptParser {
                     self.nested_patterns
                         .push(NestedPattern::Array(vec![binding_id]));
                 } else {
-                    if let Some(NestedPattern::Array(ref mut bindings)) =
+                    if let Some(NestedPattern::Array(bindings)) =
                         self.nested_patterns.last_mut()
                     {
                         bindings.push(binding_id);
@@ -2514,7 +2514,7 @@ impl ScriptParser {
                     return 1;
                 } else if tok.is_close_square() {
                     // Pattern complete
-                    if let Some(NestedPattern::Array(ref bindings)) = self.nested_patterns.last() {
+                    if let Some(NestedPattern::Array(bindings)) = self.nested_patterns.last() {
                         if bindings.len() == nested_count as usize {
                             let pattern_idx = self.nested_patterns.len() - 1;
                             let placeholder_pos =
@@ -2550,7 +2550,7 @@ impl ScriptParser {
                     self.nested_patterns
                         .push(NestedPattern::Array(vec![binding_id]));
                 } else {
-                    if let Some(NestedPattern::Array(ref mut bindings)) =
+                    if let Some(NestedPattern::Array(bindings)) =
                         self.nested_patterns.last_mut()
                     {
                         bindings.push(binding_id);
@@ -2631,7 +2631,7 @@ impl ScriptParser {
                     return 1;
                 } else if tok.is_close_curly() {
                     // Pattern complete
-                    if let Some(NestedPattern::Object(ref bindings)) = self.nested_patterns.last() {
+                    if let Some(NestedPattern::Object(bindings)) = self.nested_patterns.last() {
                         if bindings.len() == nested_count as usize {
                             let pattern_idx = self.nested_patterns.len() - 1;
                             let placeholder_pos =
@@ -2667,7 +2667,7 @@ impl ScriptParser {
                     self.nested_patterns
                         .push(NestedPattern::Object(vec![binding_id]));
                 } else {
-                    if let Some(NestedPattern::Object(ref mut bindings)) =
+                    if let Some(NestedPattern::Object(bindings)) =
                         self.nested_patterns.last_mut()
                     {
                         bindings.push(binding_id);

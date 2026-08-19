@@ -1,9 +1,9 @@
 [package]
 name = "makepad-tts"
 version = "0.1.0"
-edition = "2021"
+edition = "2024"
 description = "Speech synthesis for Makepad. Text in, PCM out — the caller owns the audio device."
-license = "MPL-2.0"
+license = "LGPL-3.0"
 
 # Standalone, like libs/voice: excluded from the makepad workspace, and this
 # empty table keeps the outer ~/makepad workspace from claiming it too.

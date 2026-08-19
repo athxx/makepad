@@ -1513,7 +1513,7 @@ mod tests {
     fn test_pseudo_random() {
         use rand::Rng;
         let mut rng = rand::thread_rng();
-        let data: Vec<u8> = (0..100_000).map(|_| rng.gen()).collect();
+        let data: Vec<u8> = (0..100_000).map(|_| rng.r#gen()).collect();
         for level in [1, 6, 12] {
             roundtrip_vs_c_zlib(&data, level);
             roundtrip_vs_c_deflate(&data, level);
@@ -1532,7 +1532,7 @@ mod tests {
                     .cycle()
                     .take(5000),
             );
-            data.extend((0..5000).map(|_| rng.gen::<u8>()));
+            data.extend((0..5000).map(|_| rng.r#gen::<u8>()));
         }
         for level in [1, 6, 9, 12] {
             roundtrip_vs_c_deflate(&data, level);
@@ -1568,7 +1568,7 @@ mod tests {
             0, 1, 2, 3, 7, 8, 15, 16, 31, 32, 63, 64, 127, 128, 255, 256, 511, 512, 1023, 1024,
             4095, 4096, 8191, 8192, 16383, 16384, 32767, 32768, 65535, 65536,
         ] {
-            let data: Vec<u8> = (0..size).map(|_| rng.gen()).collect();
+            let data: Vec<u8> = (0..size).map(|_| rng.r#gen()).collect();
             roundtrip_vs_c_zlib(&data, 6);
         }
     }
@@ -1604,13 +1604,13 @@ mod tests {
         let size = 1_000_000;
         let mut data = Vec::with_capacity(size);
         while data.len() < size {
-            if rng.gen::<f32>() < 0.75 {
+            if rng.r#gen::<f32>() < 0.75 {
                 data.extend_from_slice(
                     b"Makepad is a creative software development platform built in Rust. ",
                 );
             } else {
-                let n = (rng.gen::<usize>() % 100) + 1;
-                data.extend((0..n).map(|_| rng.gen::<u8>()));
+                let n = (rng.r#gen::<usize>() % 100) + 1;
+                data.extend((0..n).map(|_| rng.r#gen::<u8>()));
             }
         }
         data.truncate(size);
@@ -1625,7 +1625,7 @@ mod tests {
 
         for _ in 0..10_000 {
             let len = rng.gen_range(0..=512);
-            let garbage: Vec<u8> = (0..len).map(|_| rng.gen()).collect();
+            let garbage: Vec<u8> = (0..len).map(|_| rng.r#gen()).collect();
             let _ = deflate_decompress(&garbage, &mut out);
             let _ = zlib_decompress(&garbage, &mut out);
         }
@@ -1633,7 +1633,7 @@ mod tests {
         let mut tiny_out = vec![0u8; 1];
         for _ in 0..1_000 {
             let len = rng.gen_range(0..=256);
-            let garbage: Vec<u8> = (0..len).map(|_| rng.gen()).collect();
+            let garbage: Vec<u8> = (0..len).map(|_| rng.r#gen()).collect();
             let _ = deflate_decompress(&garbage, &mut tiny_out);
             let _ = zlib_decompress(&garbage, &mut tiny_out);
         }
@@ -1641,7 +1641,7 @@ mod tests {
         let mut empty_out = vec![0u8; 0];
         for _ in 0..1_000 {
             let len = rng.gen_range(0..=256);
-            let garbage: Vec<u8> = (0..len).map(|_| rng.gen()).collect();
+            let garbage: Vec<u8> = (0..len).map(|_| rng.r#gen()).collect();
             let _ = deflate_decompress(&garbage, &mut empty_out);
             let _ = zlib_decompress(&garbage, &mut empty_out);
         }
@@ -1688,7 +1688,7 @@ mod tests {
         use rand::{Rng, SeedableRng};
         let mut rng = rand::rngs::StdRng::seed_from_u64(99);
         for size in [0, 1, 10, 100, 1000, 10000, 100000] {
-            let data: Vec<u8> = (0..size).map(|_| rng.gen()).collect();
+            let data: Vec<u8> = (0..size).map(|_| rng.r#gen()).collect();
             let mut c = libdeflater::Compressor::new(libdeflater::CompressionLvl::new(6).unwrap());
             let max_sz = c.zlib_compress_bound(data.len());
             let mut compressed = vec![0u8; max_sz];

@@ -10,8 +10,7 @@
 # See Cargo.toml.orig for the original contents.
 
 [package]
-edition = "2021"
-rust-version = "1.71.1"
+edition = "2024"
 name = "pulldown-cmark"
 version = "0.12.2"
 authors = [
@@ -37,7 +36,6 @@ repository = "https://github.com/raphlinus/pulldown-cmark"
 
 [dependencies.bitflags]
 version = "2"
-path = "../bitflags"
 
 [dependencies.getopts]
 version = "0.2"

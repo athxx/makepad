@@ -24,7 +24,7 @@ keywords = [
     "opentype",
 ]
 categories = ["parser-implementations"]
-license = "MPL-2.0"
+license = "LGPL-3.0"
 repository = "https://github.com/RazrFalcon/ttf-parser"
 
 [features]

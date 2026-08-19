@@ -66,14 +66,14 @@ unsafe impl Send for RcObjcId {}
 unsafe impl Sync for RcObjcId {}
 
 #[link(name = "system")]
-extern "C" {
+unsafe extern "C" {
     pub static _NSConcreteStackBlock: [*const c_void; 32];
     pub static _NSConcreteBogusBlock: [*const c_void; 32];
 }
 
 #[cfg(target_os = "ios")]
 #[link(name = "UIKit", kind = "framework")]
-extern "C" {
+unsafe extern "C" {
     pub static UIKeyboardFrameBeginUserInfoKey: ObjcId;
     pub static UIKeyboardFrameEndUserInfoKey: ObjcId;
     pub static UIKeyboardWillShowNotification: ObjcId;
@@ -102,7 +102,7 @@ extern "C" {
 
 #[cfg(any(target_os = "ios", target_os = "tvos"))]
 #[link(name = "UIKit", kind = "framework")]
-extern "C" {
+unsafe extern "C" {
     pub fn UIApplicationMain(
         argc: i32,
         argv: *mut *mut i8,
@@ -112,7 +112,7 @@ extern "C" {
 }
 
 #[link(name = "Foundation", kind = "framework")]
-extern "C" {
+unsafe extern "C" {
     pub fn dispatch_queue_create(label: *const u8, attr: ObjcId) -> ObjcId;
     pub fn dispatch_get_global_queue(ident: u64, flags: u64) -> ObjcId;
     pub fn dispatch_release(object: ObjcId);
@@ -143,12 +143,12 @@ extern "C" {
 }
 
 #[link(name = "QuartzCore", kind = "framework")]
-extern "C" {
+unsafe extern "C" {
     pub fn CACurrentMediaTime() -> f64;
 }
 
 #[link(name = "ImageIO", kind = "framework")]
-extern "C" {
+unsafe extern "C" {
     pub static kUTTypePNG: ObjcId;
     pub fn CGImageDestinationCreateWithURL(
         url: ObjcId,
@@ -162,7 +162,7 @@ extern "C" {
 
 #[cfg(target_os = "macos")]
 #[link(name = "AppKit", kind = "framework")]
-extern "C" {
+unsafe extern "C" {
     pub static NSPasteboardURLReadingFileURLsOnlyKey: ObjcId;
     pub static NSTrackingArea: ObjcId;
     pub static NSStringPboardType: ObjcId;
@@ -172,7 +172,7 @@ extern "C" {
 }
 
 #[link(name = "Vision", kind = "framework")]
-extern "C" {
+unsafe extern "C" {
     pub static VNImageRequestHandler: ObjcId;
     pub static VNRecognizeTextRequest: ObjcId;
 }
@@ -183,7 +183,7 @@ pub const kCGMouseEventClickState: u32 = 1;
 //pub const kCGEventSourceStateHIDSystemState: u32 = 1;
 
 #[link(name = "CoreGraphics", kind = "framework")]
-extern "C" {
+unsafe extern "C" {
     pub fn CGEventSourceCreate(state_id: u32) -> ObjcId;
     pub fn CGEventSetIntegerValueField(event: ObjcId, field: u32, value: u64);
     pub fn CGEventCreateMouseEvent(
@@ -230,14 +230,14 @@ extern "C" {
 }
 
 #[link(name = "Metal", kind = "framework")]
-extern "C" {
+unsafe extern "C" {
     pub fn MTLCreateSystemDefaultDevice() -> ObjcId;
     #[cfg(not(target_os = "ios"))]
     pub fn MTLCopyAllDevices() -> ObjcId; //TODO: Array
 }
 
 #[link(name = "AVFoundation", kind = "framework")]
-extern "C" {
+unsafe extern "C" {
     pub static AVAudioUnitComponentManager: ObjcId;
     pub static AVAudioUnit: ObjcId;
     pub static AVCaptureDevice: ObjcId;
@@ -280,7 +280,7 @@ extern "C" {
 }
 
 #[link(name = "CoreLocation", kind = "framework")]
-extern "C" {
+unsafe extern "C" {
     pub static kCLLocationAccuracyBest: f64;
     pub static kCLLocationAccuracyNearestTenMeters: f64;
 }
@@ -421,7 +421,7 @@ pub type CVMetalTextureCacheRef = *mut c_void;
 pub type CVMetalTextureRef = *mut c_void;
 
 #[link(name = "CoreMedia", kind = "framework")]
-extern "C" {
+unsafe extern "C" {
     pub static kCMSampleAttachmentKey_NotSync: CFStringRef;
 
     pub fn CMVideoFormatDescriptionGetDimensions(
@@ -529,7 +529,7 @@ extern "C" {
 }
 
 #[link(name = "CoreVideo", kind = "framework")]
-extern "C" {
+unsafe extern "C" {
     pub static kCVPixelBufferWidthKey: CFStringRef;
     pub static kCVPixelBufferHeightKey: CFStringRef;
     pub static kCVPixelBufferPixelFormatTypeKey: CFStringRef;
@@ -653,7 +653,7 @@ pub struct VTDecompressionOutputCallbackRecord {
 }
 
 #[link(name = "VideoToolbox", kind = "framework")]
-extern "C" {
+unsafe extern "C" {
     pub static kVTCompressionPropertyKey_RealTime: CFStringRef;
     pub static kVTCompressionPropertyKey_AverageBitRate: CFStringRef;
     pub static kVTCompressionPropertyKey_ExpectedFrameRate: CFStringRef;
@@ -1758,7 +1758,7 @@ pub type AudioObjectID = u32;
 pub type AudioDeviceID = u32;
 
 #[link(name = "CoreMidi", kind = "framework")]
-extern "C" {
+unsafe extern "C" {
     pub static kMIDIPropertyManufacturer: CFStringRef;
     pub static kMIDIPropertyDisplayName: CFStringRef;
     pub static kMIDIPropertyUniqueID: CFStringRef;
@@ -1831,7 +1831,7 @@ pub const AVAudioSessionPortOverrideNone: u64 = 0;
 pub const AVAudioSessionPortOverrideSpeaker: u64 = 1936747378; // 'spkr'
 
 #[link(name = "CoreAudio", kind = "framework")]
-extern "C" {
+unsafe extern "C" {
     pub static AVAudioSessionCategoryPlayAndRecord: ObjcId;
     pub static AVAudioSessionCategoryPlayback: ObjcId;
 
@@ -1864,7 +1864,7 @@ extern "C" {
 // ScreenCaptureKit framework (macOS 12.3+) for audio loopback capture
 #[cfg(target_os = "macos")]
 #[link(name = "ScreenCaptureKit", kind = "framework")]
-extern "C" {
+unsafe extern "C" {
     pub static SCShareableContent: ObjcId;
     pub static SCContentFilter: ObjcId;
     pub static SCStreamConfiguration: ObjcId;
@@ -1872,7 +1872,7 @@ extern "C" {
 }
 
 #[link(name = "GameController", kind = "framework")]
-extern "C" {
+unsafe extern "C" {
     pub static GCController: ObjcId;
     pub static GCExtendedGamepad: ObjcId;
 }
@@ -1920,10 +1920,10 @@ pub type IOHIDReportCallback = Option<
 // Game Controller Framework (GCController)
 
 #[link(name = "GameController", kind = "framework")]
-extern "C" {
+unsafe extern "C" {
     /// Notification name for when a controller connects
     pub static GCControllerDidConnectNotification: ObjcId;
-    /// Notification name for when a controller disconnects  
+    /// Notification name for when a controller disconnects
     pub static GCControllerDidDisconnectNotification: ObjcId;
     /// Notification name for when a controller becomes the current controller
     pub static GCControllerDidBecomeCurrentNotification: ObjcId;
@@ -1944,7 +1944,7 @@ pub const MACH_PORT_NULL: mach_port_t = 0;
 
 #[cfg(any(target_os = "macos", target_os = "ios"))]
 #[link(name = "IOSurface", kind = "framework")]
-extern "C" {
+unsafe extern "C" {
     pub fn IOSurfaceCreate(properties: ObjcId) -> IOSurfaceRef;
     pub fn IOSurfaceGetID(surface: IOSurfaceRef) -> IOSurfaceID;
     pub fn IOSurfaceLookup(surface_id: IOSurfaceID) -> IOSurfaceRef;
@@ -1958,7 +1958,7 @@ extern "C" {
 
 #[cfg(any(target_os = "macos", target_os = "ios"))]
 #[link(name = "CoreFoundation", kind = "framework")]
-extern "C" {
+unsafe extern "C" {
     pub static kCFBooleanTrue: CFBooleanRef;
     pub static kCFBooleanFalse: CFBooleanRef;
     #[cfg(target_os = "macos")]
@@ -2017,7 +2017,7 @@ extern "C" {
 // don't have to bundle text fonts. We ask for a font descriptor by role and
 // read back its on-disk file URL via kCTFontURLAttribute.
 #[link(name = "CoreText", kind = "framework")]
-extern "C" {
+unsafe extern "C" {
     pub static kCTFontURLAttribute: CFStringRef;
     pub static kCTFontFamilyNameAttribute: CFStringRef;
 
@@ -2071,7 +2071,7 @@ pub const kCTFontTableOptionNoOptions: CTFontTableOptions = 0;
 
 #[cfg(target_os = "macos")]
 #[link(name = "IOKit", kind = "framework")]
-extern "C" {
+unsafe extern "C" {
     pub fn IOHIDManagerCreate(allocator: CFAllocatorRef, options: IOOptionBits) -> IOHIDManagerRef;
     pub fn IOHIDManagerOpen(manager: IOHIDManagerRef, options: IOOptionBits) -> IOReturn;
     pub fn IOHIDManagerClose(manager: IOHIDManagerRef, options: IOOptionBits) -> IOReturn;
@@ -2179,7 +2179,7 @@ pub type SSLWriteFunc = Option<
 
 #[cfg(any(target_os = "macos", target_os = "ios"))]
 #[link(name = "Security", kind = "framework")]
-extern "C" {
+unsafe extern "C" {
     pub fn SSLCreateContext(
         alloc: *const c_void,
         protocol_side: SSLProtocolSide,
@@ -2256,7 +2256,7 @@ extern "C" {
 
 #[cfg(target_os = "macos")]
 #[link(name = "System")]
-extern "C" {
+unsafe extern "C" {
     pub fn mach_port_deallocate(task: mach_port_t, name: mach_port_t) -> i32;
     pub fn mach_task_self() -> mach_port_t;
 }

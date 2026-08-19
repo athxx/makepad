@@ -15,7 +15,7 @@ use std::slice;
 use std::sync::atomic::{AtomicBool, AtomicUsize, Ordering};
 use std::sync::{Arc, Mutex, OnceLock};
 
-extern "C" {
+unsafe extern "C" {
     static NSRunLoopCommonModes: ObjcId;
 }
 
@@ -678,7 +678,9 @@ fn ensure_initialized() -> Result<()> {
 
     ensure_cef_application_patch()?;
     external_pump()?;
-    env::set_var("MallocNanoZone", "0");
+    // SAFETY: called during single-threaded process initialization, before
+    // any other threads that might read the environment are spawned.
+    unsafe { env::set_var("MallocNanoZone", "0"); }
 
     let args = MainArgsStorage::current_process()?;
     let current_exe = env::current_exe()

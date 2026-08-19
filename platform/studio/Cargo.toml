@@ -1,13 +1,13 @@
 [package]
 name = "makepad-studio-protocol"
 version = "0.1.0"
-edition = "2021"
+edition = "2024"
 description = "Shared Studio app<->studio wire protocol types"
-license = "MPL-2.0"
+license = "LGPL-3.0"
 
 [dependencies]
 makepad-error-log = { path = "../../libs/error_log", version = "1.0.0" }
 makepad-live-id = { path = "../../libs/live_id", version = "1.0.0" }
 makepad-micro-serde = { path = "../../libs/micro_serde", version = "1.0.0" }
 makepad-script = { path = "../script", version = "1.0.0" }
-bitflags = { path = "../../libs/bitflags", version = "2.10" }
+bitflags = { version = "2.10" }

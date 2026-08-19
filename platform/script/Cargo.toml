@@ -2,11 +2,11 @@
 name = "makepad-script"
 version = "1.0.0"
 authors = ["Makepad <info@makepad.nl>"]
-edition = "2021"
+edition = "2024"
 description = "Makepad script (splash)"
-license = "MPL-2.0"
-homepage = "https://github.com/makepad/makepad/"
-repository = "https://github.com/makepad/makepad/"
+license = "LGPL-3.0"
+homepage = "https://github.com/visokit/viso/"
+repository = "https://github.com/visokit/viso/"
 metadata.makepad-auto-version = "yK9xdn_D0D3EdqleI-WHLtjk4rk="
 
 [features]
@@ -18,6 +18,6 @@ makepad-error-log = {path = "../../libs/error_log", version = "1.0.0" }
 makepad-math = {path = "../../libs/math", version = "1.0.0" }
 makepad-live-id = {path = "../../libs/live_id", version = "1.0.0" }
 makepad-script-derive = {path = "./derive", version = "1.0.0" }
-smallvec = { version = "1.15", path = "../../libs/smallvec" }
+smallvec = { version = "1.15" }
 makepad-regex = {path = "../../libs/regex", version = "0.1.0" }
 makepad-html = {path = "../../libs/html", version = "1.0.0" }

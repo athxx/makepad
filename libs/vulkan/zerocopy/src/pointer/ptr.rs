@@ -1248,7 +1248,7 @@ mod _project {
         I::Aliasing: Reference,
     {
         /// Iteratively projects the elements `Ptr<T>` from `Ptr<[T]>`.
-        pub(crate) fn iter(&self) -> impl Iterator<Item = Ptr<'a, T, I>> {
+        pub(crate) fn iter(&self) -> impl Iterator<Item = Ptr<'a, T, I>> + use<'a, T, I> {
             // SAFETY:
             // 0. `elem` conforms to the aliasing invariant of `I::Aliasing`
             //    because projection does not impact the aliasing invariant.

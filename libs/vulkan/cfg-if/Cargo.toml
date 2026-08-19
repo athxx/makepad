@@ -11,7 +11,6 @@
 
 [package]
 edition = "2018"
-rust-version = "1.32"
 name = "cfg-if"
 version = "1.0.4"
 authors = ["Alex Crichton <alex@alexcrichton.com>"]
@@ -27,7 +26,7 @@ parameters. Structured like an if-else chain, the first matching branch is the
 item that gets emitted.
 """
 readme = "README.md"
-license = "MPL-2.0"
+license = "LGPL-3.0"
 repository = "https://github.com/rust-lang/cfg-if"
 
 [features]

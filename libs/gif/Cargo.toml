@@ -1,11 +1,10 @@
 [package]
 name = "makepad-gif"
 version = "0.1.0"
-edition = "2021"
-rust-version = "1.62"
+edition = "2024"
 authors = ["The image-rs Developers"]
 description = "Vendored pure-Rust GIF decoder for Makepad"
-license = "MPL-2.0"
+license = "LGPL-3.0"
 repository = "https://github.com/image-rs/image-gif"
 
 [features]
@@ -18,11 +17,8 @@ std = []
 name = "makepad_gif"
 path = "src/lib.rs"
 
-[dependencies.color_quant]
-version = "1.1"
-optional = true
-path = "color_quant"
 
-[dependencies.weezl]
-version = "0.1.12"
-path = "weezl"
+
+[dependencies]
+color_quant ={ version = "2.0", optional = true}
+weezl = "0.2.1"

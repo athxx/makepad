@@ -1,9 +1,9 @@
 [package]
 name = "makepad-game-session"
 version = "0.1.0"
-edition = "2021"
+edition = "2024"
 description = "Makepad Arcade multiplayer session: replication tiers + host/client drivers (see game.md)"
-license = "MPL-2.0"
+license = "LGPL-3.0"
 
 [dependencies]
 makepad-game-sim = { path = "../sim" }

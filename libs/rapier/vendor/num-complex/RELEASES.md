@@ -66,7 +66,7 @@
 
 # Release 0.3.1 (2020-10-29)
 
-- Clarify the license specification as "MPL-2.0".
+- Clarify the license specification as "LGPL-3.0".
 
 **Contributors**: @cuviper
 
@@ -152,8 +152,8 @@
 
 - [`num-complex` now requires rustc 1.15 or greater][16].
 - [There is now a `std` feature][22], enabled by default, along with the
-  implication that building *without* this feature makes this a `#![no_std]`
-  crate.  A few methods now require `FloatCore`, and the remaining methods
+  implication that building _without_ this feature makes this a `#![no_std]`
+  crate. A few methods now require `FloatCore`, and the remaining methods
   based on `Float` are only supported with `std`.
 - [The `serde` dependency has been updated to 1.0][7], and `rustc-serialize`
   is no longer supported by `num-complex`.
@@ -170,7 +170,6 @@
 [28]: https://github.com/rust-num/num-complex/pull/28
 [30]: https://github.com/rust-num/num-complex/pull/30
 
-
 # Release 0.1.43 (2018-03-08)
 
 - [Fix a usage typo in README.md][20].
@@ -178,7 +177,6 @@
 **Contributors**: @shingtaklam1324
 
 [20]: https://github.com/rust-num/num-complex/pull/20
-
 
 # Release 0.1.42 (2018-02-07)
 
@@ -189,9 +187,7 @@
 [home]: https://github.com/rust-num/num-complex
 [num-356]: https://github.com/rust-num/num/pull/356
 
-
 # Prior releases
 
-No prior release notes were kept.  Thanks all the same to the many
+No prior release notes were kept. Thanks all the same to the many
 contributors that have made this crate what it is!
-

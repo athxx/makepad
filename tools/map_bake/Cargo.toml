@@ -1,7 +1,7 @@
 [package]
 name = "makepad-map-bake"
 version = "0.1.0"
-edition = "2021"
+edition = "2024"
 description = "Offline painter-cascade face baker: appends payload v2-faces-1 (field 101) to map archives by replaying the renderer's own road-union pipeline"
 
 [dependencies]

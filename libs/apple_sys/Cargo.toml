@@ -1,9 +1,9 @@
 [package]
 name = "makepad-apple-sys"
 version = "1.0.0"
-edition = "2021"
+edition = "2024"
 description = "Shared Apple ObjC/sys bindings for Makepad crates"
-license = "MPL-2.0"
+license = "LGPL-3.0"
 
 [dependencies]
 makepad-objc-sys = { path = "../objc-sys", version = "1.0.0" }

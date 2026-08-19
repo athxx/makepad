@@ -802,7 +802,7 @@ pub fn simplify_path(points: &[TilePoint], epsilon: f64) -> Vec<TilePoint> {
     points
         .iter()
         .zip(&keep)
-        .filter(|(_, &k)| k)
+        .filter(|(_, k)| **k)
         .map(|(p, _)| *p)
         .collect()
 }

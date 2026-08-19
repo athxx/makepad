@@ -1,9 +1,9 @@
 [package]
 name = "makepad-game-audio"
 version = "0.1.0"
-edition = "2021"
+edition = "2024"
 description = "Sampled audio for Makepad Arcade: WAV/Vorbis decode, sample bank, mixer, and gameplay-driven emission (see game.md)"
-license = "MPL-2.0"
+license = "LGPL-3.0"
 
 [dependencies]
 
