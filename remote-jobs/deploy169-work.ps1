@@ -23,7 +23,10 @@ try {
     $env:CARGO_TERM_PROGRESS_WHEN = "never"
     Write-Host "HEAD=$(git -C $src rev-parse HEAD)"
     Set-Location $crate
-    cargo build --release --bin makepad-asset-ai
+    # .169 is the box with the FlashWorld / DA3 / rig+motion oracle venvs
+    # provisioned, so it opts into the python reference backends (the
+    # default feature set is native-only; see libs/asset/ai/Cargo.toml).
+    cargo build --release --bin makepad-asset-ai --features python-backends
     $code = $LASTEXITCODE
     Write-Host "build_exit=$code"
     if ($code -ne 0) { throw "cargo build failed: $code" }
