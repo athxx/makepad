@@ -6,8 +6,8 @@ authors = ["Makepad <info@makepad.nl>", "Steven Sheldon"]
 description = "Makepad fork of SSheldon/rust-objc without libc dep."
 keywords = ["objective-c", "osx", "ios", "cocoa", "uikit"]
 license = "MIT"
-homepage = "https://github.com/makepad/makepad/"
-repository = "https://github.com/makepad/makepad/"
+homepage = "https://github.com/visokit/viso/"
+repository = "https://github.com/visokit/viso/"
 metadata.makepad-auto-version = "U-56yT7piSde3HaE8TFwEgDIgDI="
 
 [features]

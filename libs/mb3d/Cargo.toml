@@ -1,7 +1,7 @@
 [package]
 name = "makepad-mb3d-render"
 version = "0.1.0"
-edition = "2021"
+edition = "2024"
 description = "MB3D fractal renderer - parses M3P files, ray-marches fractals, outputs PNG or OpenEXR"
 
 [dependencies]

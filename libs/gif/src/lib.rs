@@ -146,7 +146,7 @@ pub mod streaming_decoder {
 macro_rules! insert_as_doc {
     { $content:expr } => {
         #[allow(unused_doc_comments)]
-        #[doc = $content] extern "C" { }
+        #[doc = $content] mod readme_doctest {}
     }
 }
 

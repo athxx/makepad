@@ -1,8 +1,8 @@
 [package]
 name = "makepad-filesystem-watcher"
 version = "0.1.0"
-edition = "2021"
+edition = "2024"
 description = "Platform-specific filesystem watcher for Studio backends"
-license = "MPL-2.0"
+license = "LGPL-3.0"
 
 [dependencies]

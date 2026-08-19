@@ -10,8 +10,7 @@
 # See Cargo.toml.orig for the original contents.
 
 [package]
-edition = "2021"
-rust-version = "1.68"
+edition = "2024"
 name = "thiserror"
 version = "2.0.18"
 authors = ["David Tolnay <dtolnay@gmail.com>"]
@@ -33,7 +32,7 @@ categories = [
     "rust-patterns",
     "no-std",
 ]
-license = "MPL-2.0"
+license = "LGPL-3.0"
 repository = "https://github.com/dtolnay/thiserror"
 
 [package.metadata.docs.rs]

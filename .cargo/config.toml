@@ -10,3 +10,30 @@
 # RUSTFLAGS="-Cprofile-use=$(pwd)/libs/box3d/box3d.profdata" cargo build --release -p makepad-box3d
 [build]
 rustflags = []
+
+# Silence the edition-2024 `unsafe_op_in_unsafe_fn` lint across the whole
+# dependency graph (workspace crates + vendored third-party like byteorder).
+#
+# It MUST live in the per-target `rustflags`, not `[build] rustflags`: the
+# global ~/.cargo/config.toml sets a per-target `rustflags` (linker flags), and
+# Cargo does NOT merge target- and build-level rustflags — the more specific
+# per-target list wins and fully replaces the build-level one. So a
+# `[build] rustflags` here would be silently ignored. We therefore duplicate the
+# global linker flags here and append the lint allow; this list fully overrides
+# the global per-target list for viso builds. Changing it forces a one-time full
+# rebuild (every crate's fingerprint changes).
+[target.'cfg(target_os = "macos")']
+linker = "clang"
+rustflags = [
+    "-C", "link-arg=-fuse-ld=lld",
+    "-C", "link-arg=-Wl,-dead_strip",
+    "-A", "unsafe_op_in_unsafe_fn",
+]
+
+[target.'cfg(target_os = "linux")']
+linker = "clang"
+rustflags = [
+    "-C", "link-arg=-fuse-ld=mold",
+    "-C", "link-arg=-Wl,--gc-sections",
+    "-A", "unsafe_op_in_unsafe_fn",
+]

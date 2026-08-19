@@ -1,9 +1,9 @@
 [package]
 name = "makepad-terminal-core"
 version = "1.0.0"
-edition = "2021"
+edition = "2024"
 description = "Terminal emulation core (VT parser, screen buffer, PTY)"
-license = "MPL-2.0"
+license = "LGPL-3.0"
 
 [dependencies]
 

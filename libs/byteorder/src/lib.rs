@@ -2299,24 +2299,24 @@ mod test {
     }
 
     impl Arbitrary for Wi128<u128> {
-        fn arbitrary<G: Gen>(gen: &mut G) -> Wi128<u128> {
-            let max = calc_max!(::core::u128::MAX, gen.size(), 16);
-            let output = (gen.gen::<u64>() as u128) | ((gen.gen::<u64>() as u128) << 64);
+        fn arbitrary<G: Gen>(r#gen: &mut G) -> Wi128<u128> {
+            let max = calc_max!(::core::u128::MAX, r#gen.size(), 16);
+            let output = (r#gen.r#gen::<u64>() as u128) | ((r#gen.r#gen::<u64>() as u128) << 64);
             Wi128(output & (max - 1))
         }
     }
 
     impl Arbitrary for Wi128<i128> {
-        fn arbitrary<G: Gen>(gen: &mut G) -> Wi128<i128> {
-            let max = calc_max!(::core::i128::MAX, gen.size(), 16);
-            let output = (gen.gen::<i64>() as i128) | ((gen.gen::<i64>() as i128) << 64);
+        fn arbitrary<G: Gen>(r#gen: &mut G) -> Wi128<i128> {
+            let max = calc_max!(::core::i128::MAX, r#gen.size(), 16);
+            let output = (r#gen.r#gen::<i64>() as i128) | ((r#gen.r#gen::<i64>() as i128) << 64);
             Wi128(output & (max - 1))
         }
     }
 
     pub fn qc_sized<A: Testable>(f: A, size: u64) {
         QuickCheck::new()
-            .gen(StdGen::new(thread_rng(), size as usize))
+            .r#gen(StdGen::new(thread_rng(), size as usize))
             .tests(1_00)
             .max_tests(10_000)
             .quickcheck(f);
@@ -3147,7 +3147,7 @@ mod stdtests {
 
     fn qc_unsized<A: Testable>(f: A) {
         QuickCheck::new()
-            .gen(StdGen::new(thread_rng(), 16))
+            .r#gen(StdGen::new(thread_rng(), 16))
             .tests(1_00)
             .max_tests(10_000)
             .quickcheck(f);

@@ -1,7 +1,7 @@
 [package]
 name = "makepad-zune-core"
 version = "0.5.1"
-edition = "2021"
+edition = "2024"
 description = "Core utilities for image processing in the zune family of crates"
 exclude = ["tests/"]
 repository = "https://github.com/etemesi254/zune-image"

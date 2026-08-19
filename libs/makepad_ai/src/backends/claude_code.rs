@@ -98,7 +98,7 @@ impl ClaudeCodeProcess {
         // children running and the CLI itself as a zombie.
         #[cfg(unix)]
         {
-            extern "C" {
+            unsafe extern "C" {
                 fn kill(pid: i32, sig: i32) -> i32;
             }
             const SIGKILL: i32 = 9;

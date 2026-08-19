@@ -1,5 +1,5 @@
 [package]
-edition = "2021"
+edition = "2024"
 name = "parry3d"
 version = "0.26.0"
 authors = ["Sébastien Crozet <developer@crozet.re>"]
@@ -93,7 +93,6 @@ default-features = false
 path = "../../../../libs/vulkan/arrayvec"
 [dependencies.bitflags]
 version = "2.3"
-path = "../../../../libs/bitflags"
 [dependencies.bytemuck]
 version = "1"
 features = ["derive"]
@@ -146,7 +145,6 @@ default-features = false
 path = "../simba"
 [dependencies.smallvec]
 version = "1"
-path = "../../../../libs/smallvec"
 [dependencies.static_assertions]
 version = "1"
 path = "../static_assertions"

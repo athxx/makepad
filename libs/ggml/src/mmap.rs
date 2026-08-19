@@ -21,7 +21,7 @@ mod imp {
     const PROT_READ: c_int = 1;
     const MAP_SHARED: c_int = 1;
 
-    extern "C" {
+    unsafe extern "C" {
         fn open(path: *const c_char, flags: c_int, ...) -> c_int;
         fn close(fd: c_int) -> c_int;
         fn lseek(fd: c_int, offset: i64, whence: c_int) -> i64;

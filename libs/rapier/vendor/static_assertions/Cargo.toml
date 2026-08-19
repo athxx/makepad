@@ -10,7 +10,7 @@ documentation = "https://docs.rs/static_assertions/"
 readme = "README.md"
 keywords = ["assert", "static", "testing"]
 categories = ["no-std", "rust-patterns", "development-tools::testing"]
-license = "MPL-2.0"
+license = "LGPL-3.0"
 repository = "https://github.com/nvzqz/static-assertions-rs"
 
 [features]

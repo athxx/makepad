@@ -1,8 +1,5 @@
 workspace.members = [
-    # === app ===
-    "apps/route",
-    "apps/asset-ui",
-    "apps/vj",
+
     "libs/asset/importer",
     "libs/asset/data",
     "libs/asset/client",
@@ -16,6 +13,11 @@ workspace.members = [
     "libs/pbr_paint",
     "libs/remesh",
     "libs/xatlas",
+    # === app ===
+    "apps/asset-ui",
+    "apps/vj",
+    # === arcade (game.md) ===
+    "examples/app_route",
     # === examples ===
     "examples/teamtalk",
     "examples/automate",
@@ -52,8 +54,8 @@ workspace.members = [
     # === xr app ===
     "xr",
     # === studio ===
-    "studio/hub",
-    "studio/desktop",
+    "examples/studio/hub",
+    "examples/studio/desktop",
     # === necessary tools ===
     "platform/video",
     "tools/cargo_makepad",
@@ -65,6 +67,10 @@ workspace.members = [
 ]
 
 workspace.exclude = [
+    # Arcade game sandbox. Kept in tree but excluded: its libs/game/* path
+    # deps collide with libs/sim/libs/sim/math (same package names
+    # makepad-game-sim / makepad-game-math). Build it standalone.
+    "examples/app_arcade",
     # Private Arcade frontend. Clone into apps/sandbox; path deps stay ../../
     # like a subdirectory. Not a required member so a clean makepad tree
     # still loads.
@@ -96,7 +102,6 @@ workspace.exclude = [
     "libs/i_shape",
     "libs/i_tree",
     "libs/adler2",
-    "libs/bitflags",
     "libs/bytemuck",
     "libs/byteorder",
     "libs/cfg-if",
@@ -109,7 +114,6 @@ workspace.exclude = [
     "libs/rustybuzz",
     "libs/sdfer",
     "libs/simd-adler32",
-    "libs/smallvec",
     "libs/ttf-parser",
     "libs/unicase",
     "libs/unicode/unicode-bidi",
@@ -161,7 +165,6 @@ workspace.exclude = [
     "libs/windows/windows-collections",
     "libs/windows/windows-core",
     "libs/windows/windows-future",
-    "libs/windows/windows-link",
     "libs/windows/windows-result",
     "libs/windows/windows-rs",
     "libs/windows/windows-strings",
@@ -179,10 +182,6 @@ workspace.exclude = [
 workspace.resolver = "2"
 #debug = true
 
-[patch.crates-io]
-bitflags = { path = "libs/bitflags" }
-smallvec = { path = "libs/smallvec" }
-windows-link = { path = "libs/windows/windows-link" }
 
 [profile.small]
 inherits = "release"

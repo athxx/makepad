@@ -10,7 +10,6 @@
 # See Cargo.toml.orig for the original contents.
 
 [package]
-rust-version = "1.6"
 name = "equivalent"
 version = "1.0.2"
 build = false

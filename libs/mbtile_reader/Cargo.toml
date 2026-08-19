@@ -1,9 +1,9 @@
 [package]
 name = "makepad-mbtile-reader"
 version = "1.0.0"
-edition = "2021"
+edition = "2024"
 description = "Minimal pure-Rust SQLite reader and streaming writer for MBTiles files"
-license = "MPL-2.0"
+license = "LGPL-3.0"
 
 [dependencies]
 brotli = "8.0"

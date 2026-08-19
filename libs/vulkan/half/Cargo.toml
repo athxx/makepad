@@ -10,8 +10,7 @@
 # See Cargo.toml.orig for the original contents.
 
 [package]
-edition = "2021"
-rust-version = "1.81"
+edition = "2024"
 name = "half"
 version = "2.7.1"
 authors = ["Kathryn Long <squeeself@gmail.com>"]
@@ -38,7 +37,7 @@ categories = [
     "data-structures",
     "encoding",
 ]
-license = "MPL-2.0"
+license = "LGPL-3.0"
 repository = "https://github.com/VoidStarKat/half-rs"
 
 [package.metadata.docs.rs]

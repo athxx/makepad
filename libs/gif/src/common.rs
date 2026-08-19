@@ -333,7 +333,7 @@ impl Frame<'static> {
         let least_used_color = color_frequencies
             .iter()
             .enumerate()
-            .min_by_key(|(_, &value)| value)
+            .min_by_key(|(_, value)| *value)
             .map(|(index, _)| index as u8)
             .expect("input slice is empty");
 

@@ -1,9 +1,9 @@
 [package]
 name = "makepad-map-tiles"
 version = "0.1.0"
-edition = "2021"
+edition = "2024"
 description = "Build, audit, and probe disk-streamable OpenStreetMap tile archives"
-license = "MPL-2.0"
+license = "LGPL-3.0"
 
 [dependencies]
 brotli = "8.0"
@@ -13,4 +13,4 @@ makepad-map-nav = { path = "../../libs/map_nav" }
 makepad-mbtile-reader = { path = "../../libs/mbtile_reader" }
 osmpbf = "0.3.8"
 serde_json = "1.0"
-smallvec = { path = "../../libs/smallvec" }
+smallvec = { version = "1.15" }

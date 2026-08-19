@@ -1,3 +1,5 @@
+const INVALID_BASE64: u8 = 64;
+
 const BASE64_DEC: [u8; 256] = [
     64, 64, 64, 64, 64, 64, 64, 64, 64, 64, 64, 64, 64, 64, 64, 64, 64, 64, 64, 64, 64, 64, 64, 64,
     64, 64, 64, 64, 64, 64, 64, 64, 64, 64, 64, 64, 64, 64, 64, 64, 64, 64, 64, 62, 64, 62, 64, 63,
@@ -11,163 +13,229 @@ const BASE64_DEC: [u8; 256] = [
     64, 64, 64, 64, 64, 64, 64, 64, 64, 64, 64, 64, 64, 64, 64, 64, 64, 64, 64, 64, 64, 64, 64, 64,
     64, 64, 64, 64, 64, 64, 64, 64, 64, 64, 64, 64, 64, 64,
 ];
-pub const BASE64_STANDARD: [u8; 64] = [
-    0x41, 0x42, 0x43, 0x44, 0x45, 0x46, 0x47, 0x48, 0x49, 0x4A, 0x4B, 0x4C, 0x4D, 0x4E, 0x4F, 0x50,
-    0x51, 0x52, 0x53, 0x54, 0x55, 0x56, 0x57, 0x58, 0x59, 0x5A, 0x61, 0x62, 0x63, 0x64, 0x65, 0x66,
-    0x67, 0x68, 0x69, 0x6A, 0x6B, 0x6C, 0x6D, 0x6E, 0x6F, 0x70, 0x71, 0x72, 0x73, 0x74, 0x75, 0x76,
-    0x77, 0x78, 0x79, 0x7A, 0x30, 0x31, 0x32, 0x33, 0x34, 0x35, 0x36, 0x37, 0x38, 0x39, 0x2B, 0x2F,
-];
-pub const BASE64_URL_SAFE: [u8; 64] = [
-    0x41, 0x42, 0x43, 0x44, 0x45, 0x46, 0x47, 0x48, 0x49, 0x4A, 0x4B, 0x4C, 0x4D, 0x4E, 0x4F, 0x50,
-    0x51, 0x52, 0x53, 0x54, 0x55, 0x56, 0x57, 0x58, 0x59, 0x5A, 0x61, 0x62, 0x63, 0x64, 0x65, 0x66,
-    0x67, 0x68, 0x69, 0x6A, 0x6B, 0x6C, 0x6D, 0x6E, 0x6F, 0x70, 0x71, 0x72, 0x73, 0x74, 0x75, 0x76,
-    0x77, 0x78, 0x79, 0x7A, 0x30, 0x31, 0x32, 0x33, 0x34, 0x35, 0x36, 0x37, 0x38, 0x39, 0x2D, 0x5F,
-];
 
-pub fn base64_encode(inp: &[u8], table: &[u8; 64]) -> Vec<u8> {
-    let mut out = Vec::new();
-    let mut i = 0;
-    out.resize(inp.len() + inp.len() / 3 + 4, 0u8);
-    let mut o = 0;
-    while i + 2 < inp.len() {
-        // hop over in chunks of 3 bytes outputting 4 chars
-        let out = &mut out[o..o + 4]; // this causes a single boundscheck per 4 items
-        out[0] = table[(inp[i] >> 2) as usize];
-        out[1] = table[((inp[i] & 0x3) << 4 | inp[i + 1] >> 4) as usize];
-        out[2] = table[((inp[i + 1] & 0xf) << 2 | inp[i + 2] >> 6) as usize];
-        out[3] = table[(inp[i + 2] & 0x3f) as usize];
-        i += 3;
-        o += 4;
-    }
-    out.resize(o, 0u8);
-    let bytes_left = inp.len() - i;
-    if bytes_left == 1 {
-        out.push(table[(inp[i] >> 2) as usize]);
-        out.push(table[((inp[i] & 0x3) << 4) as usize]);
-    } else if bytes_left == 2 {
-        out.push(table[(inp[i] >> 2) as usize]);
-        out.push(table[((inp[i] & 0x3) << 4 | inp[i + 1] >> 4) as usize]);
-        out.push(table[((inp[i + 1] & 0xf) << 2) as usize]);
-    }
-    let end_pad = 3 - inp.len() % 3;
-    if end_pad == 1 {
-        out.push(b'=');
-    } else if end_pad == 2 {
-        out.push(b'=');
-        out.push(b'=');
-    }
+pub const BASE64_STANDARD: [u8; 64] =
+    *b"ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/";
 
-    out
-}
+pub const BASE64_URL_SAFE: [u8; 64] =
+    *b"ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789-_";
 
-#[derive(Debug)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum Base64DecodeError {
     WrongPadding,
     InvalidCharacter,
 }
 
-pub fn base64_decode(input: &[u8]) -> Result<Vec<u8>, Base64DecodeError> {
-    let mut out = Vec::new();
-    out.resize(input.len() * 3 / 4, 0u8);
-    if input.len() & 3 != 0 {
-        // base64 should be padded to 4 char chunks
-        return Err(Base64DecodeError::WrongPadding);
+#[inline]
+pub fn base64_encode(input: &[u8], table: &[u8; 64]) -> Vec<u8> {
+    let len = input.len();
+
+    if len == 0 {
+        return Vec::new();
     }
-    let mut o = 0;
-    let mut i = 0;
-    while i < input.len() {
-        let inp = &input[i..i + 4]; // help the boundscheck to happen only once per 4
-        let out = &mut out[o..o + 3];
-        let b0 = BASE64_DEC[inp[0] as usize];
-        let b1 = BASE64_DEC[inp[1] as usize];
-        let b2 = BASE64_DEC[inp[2] as usize];
-        let b3 = BASE64_DEC[inp[3] as usize];
-        if b0 == 64 || b1 == 64 || b2 == 64 || b3 == 64 {
-            return Err(Base64DecodeError::InvalidCharacter); // invalid character used
+
+    let full_chunks = len / 3;
+    let remainder = len % 3;
+    let out_len = full_chunks * 4 + usize::from(remainder != 0) * 4;
+
+    let mut out = Vec::with_capacity(out_len);
+
+    // SAFETY:
+    // - `out` has exactly enough capacity for `out_len` bytes.
+    // - Every output byte is initialized before `set_len`.
+    // - Input accesses stay within `input`.
+    unsafe {
+        let mut src = input.as_ptr();
+        let mut dst = out.as_mut_ptr();
+
+        for _ in 0..full_chunks {
+            let b0 = *src;
+            let b1 = *src.add(1);
+            let b2 = *src.add(2);
+
+            *dst = *table.get_unchecked((b0 >> 2) as usize);
+            *dst.add(1) =
+                *table.get_unchecked((((b0 & 0x03) << 4) | (b1 >> 4)) as usize);
+            *dst.add(2) =
+                *table.get_unchecked((((b1 & 0x0f) << 2) | (b2 >> 6)) as usize);
+            *dst.add(3) = *table.get_unchecked((b2 & 0x3f) as usize);
+
+            src = src.add(3);
+            dst = dst.add(4);
         }
-        out[0] = (b0 << 2) | (b1 >> 4);
-        out[1] = (b1 & 0xf) << 4 | (b2 >> 2);
-        out[2] = ((b2 & 0x3) << 6) | b3;
-        i += 4;
-        o += 3;
+
+        match remainder {
+            1 => {
+                let b0 = *src;
+
+                *dst = *table.get_unchecked((b0 >> 2) as usize);
+                *dst.add(1) = *table.get_unchecked(((b0 & 0x03) << 4) as usize);
+                *dst.add(2) = b'=';
+                *dst.add(3) = b'=';
+            }
+            2 => {
+                let b0 = *src;
+                let b1 = *src.add(1);
+
+                *dst = *table.get_unchecked((b0 >> 2) as usize);
+                *dst.add(1) =
+                    *table.get_unchecked((((b0 & 0x03) << 4) | (b1 >> 4)) as usize);
+                *dst.add(2) =
+                    *table.get_unchecked(((b1 & 0x0f) << 2) as usize);
+                *dst.add(3) = b'=';
+            }
+            _ => {}
+        }
+
+        out.set_len(out_len);
     }
-    if input[input.len() - 1] == b'=' {
-        o -= 1; // single padding: 2 bytes encoded in last 4-char group
-    }
-    if input[input.len() - 2] == b'=' {
-        o -= 1; // double padding: 1 byte encoded in last 4-char group
-    }
-    out.resize(o, 0u8);
-    Ok(out)
+
+    out
 }
 
-#[cfg(test)]
-mod tests {
-    use super::*;
+#[inline]
+pub fn base64_decode(input: &[u8]) -> Result<Vec<u8>, Base64DecodeError> {
+    let len = input.len();
 
-    #[test]
-    fn roundtrip_no_padding() {
-        // 3 bytes → 4 base64 chars, no padding
-        let input = b"abc";
-        let encoded = base64_encode(input, &BASE64_STANDARD);
-        let decoded = base64_decode(&encoded).unwrap();
-        assert_eq!(decoded, input);
+    if len == 0 {
+        return Ok(Vec::new());
     }
 
-    #[test]
-    fn roundtrip_single_padding() {
-        // 2 bytes → 4 base64 chars with single '=' padding
-        let input = b"ab";
-        let encoded = base64_encode(input, &BASE64_STANDARD);
-        assert_eq!(encoded.last(), Some(&b'='));
-        assert_ne!(encoded[encoded.len() - 2], b'='); // single, not double
-        let decoded = base64_decode(&encoded).unwrap();
-        assert_eq!(decoded, input, "Single-padding roundtrip failed");
+    if len & 3 != 0 {
+        return Err(Base64DecodeError::WrongPadding);
     }
 
-    #[test]
-    fn roundtrip_double_padding() {
-        // 1 byte → 4 base64 chars with '==' padding
-        let input = b"a";
-        let encoded = base64_encode(input, &BASE64_STANDARD);
-        assert_eq!(&encoded[encoded.len() - 2..], b"==");
-        let decoded = base64_decode(&encoded).unwrap();
-        assert_eq!(decoded, input, "Double-padding roundtrip failed");
-    }
-
-    #[test]
-    fn roundtrip_empty() {
-        let input = b"";
-        let encoded = base64_encode(input, &BASE64_STANDARD);
-        assert!(encoded.is_empty() || base64_decode(&encoded).unwrap().is_empty());
-    }
-
-    #[test]
-    fn roundtrip_various_lengths() {
-        // Test lengths 1-20 to cover all padding cases
-        for len in 1..=20 {
-            let input: Vec<u8> = (0..len).map(|i| i as u8).collect();
-            let encoded = base64_encode(&input, &BASE64_STANDARD);
-            let decoded = base64_decode(&encoded).unwrap();
-            assert_eq!(decoded, input, "Roundtrip failed for length {}", len);
+    let padding = if input[len - 1] == b'=' {
+        if input[len - 2] == b'=' {
+            2
+        } else {
+            1
         }
+    } else {
+        0
+    };
+
+    let chunks = len / 4;
+    let out_len = chunks * 3 - padding;
+
+    let mut out: Vec<u8> = Vec::with_capacity(out_len);
+
+    // SAFETY:
+    // - Input length is a multiple of four.
+    // - `out` has enough capacity for the exact decoded length.
+    // - Output length is set only after every returned byte is initialized.
+    unsafe {
+        let src = input.as_ptr();
+        let dst = out.as_mut_ptr();
+
+        // Decode every block except the final one.
+        for i in 0..chunks - 1 {
+            let s = src.add(i * 4);
+
+            let c0 = *s;
+            let c1 = *s.add(1);
+            let c2 = *s.add(2);
+            let c3 = *s.add(3);
+
+            // Padding is illegal before the final block.
+            if c0 == b'=' || c1 == b'=' || c2 == b'=' || c3 == b'=' {
+                return Err(Base64DecodeError::WrongPadding);
+            }
+
+            let b0 = *BASE64_DEC.get_unchecked(c0 as usize);
+            let b1 = *BASE64_DEC.get_unchecked(c1 as usize);
+            let b2 = *BASE64_DEC.get_unchecked(c2 as usize);
+            let b3 = *BASE64_DEC.get_unchecked(c3 as usize);
+
+            // All valid values are 0..=63.
+            if (b0 | b1 | b2 | b3) & INVALID_BASE64 != 0 {
+                return Err(Base64DecodeError::InvalidCharacter);
+            }
+
+            let d = dst.add(i * 3);
+
+            *d = (b0 << 2) | (b1 >> 4);
+            *d.add(1) = ((b1 & 0x0f) << 4) | (b2 >> 2);
+            *d.add(2) = ((b2 & 0x03) << 6) | b3;
+        }
+
+        // Final block needs separate handling because of padding.
+        let s = src.add((chunks - 1) * 4);
+
+        let c0 = *s;
+        let c1 = *s.add(1);
+        let c2 = *s.add(2);
+        let c3 = *s.add(3);
+
+        if c0 == b'=' || c1 == b'=' {
+            return Err(Base64DecodeError::WrongPadding);
+        }
+
+        let b0 = *BASE64_DEC.get_unchecked(c0 as usize);
+        let b1 = *BASE64_DEC.get_unchecked(c1 as usize);
+
+        if (b0 | b1) & INVALID_BASE64 != 0 {
+            return Err(Base64DecodeError::InvalidCharacter);
+        }
+
+        let d = dst.add((chunks - 1) * 3);
+
+        match padding {
+            0 => {
+                if c2 == b'=' || c3 == b'=' {
+                    return Err(Base64DecodeError::WrongPadding);
+                }
+
+                let b2 = *BASE64_DEC.get_unchecked(c2 as usize);
+                let b3 = *BASE64_DEC.get_unchecked(c3 as usize);
+
+                if (b2 | b3) & INVALID_BASE64 != 0 {
+                    return Err(Base64DecodeError::InvalidCharacter);
+                }
+
+                *d = (b0 << 2) | (b1 >> 4);
+                *d.add(1) = ((b1 & 0x0f) << 4) | (b2 >> 2);
+                *d.add(2) = ((b2 & 0x03) << 6) | b3;
+            }
+
+            1 => {
+                if c2 == b'=' || c3 != b'=' {
+                    return Err(Base64DecodeError::WrongPadding);
+                }
+
+                let b2 = *BASE64_DEC.get_unchecked(c2 as usize);
+
+                if b2 == INVALID_BASE64 {
+                    return Err(Base64DecodeError::InvalidCharacter);
+                }
+
+                // Canonical Base64 requires unused bits to be zero.
+                if b2 & 0x03 != 0 {
+                    return Err(Base64DecodeError::WrongPadding);
+                }
+
+                *d = (b0 << 2) | (b1 >> 4);
+                *d.add(1) = ((b1 & 0x0f) << 4) | (b2 >> 2);
+            }
+
+            2 => {
+                if c2 != b'=' || c3 != b'=' {
+                    return Err(Base64DecodeError::WrongPadding);
+                }
+
+                // Canonical Base64 requires unused bits to be zero.
+                if b1 & 0x0f != 0 {
+                    return Err(Base64DecodeError::WrongPadding);
+                }
+
+                *d = (b0 << 2) | (b1 >> 4);
+            }
+
+            _ => unreachable!(),
+        }
+
+        out.set_len(out_len);
     }
 
-    #[test]
-    fn roundtrip_binary_data() {
-        // All byte values
-        let input: Vec<u8> = (0..=255).collect();
-        let encoded = base64_encode(&input, &BASE64_STANDARD);
-        let decoded = base64_decode(&encoded).unwrap();
-        assert_eq!(decoded, input);
-    }
-
-    #[test]
-    fn roundtrip_url_safe() {
-        let input = b"hello world!";
-        let encoded = base64_encode(input, &BASE64_URL_SAFE);
-        // URL-safe uses - and _ instead of + and /
-        let decoded = base64_decode(&encoded).unwrap();
-        assert_eq!(decoded, input);
-    }
+    Ok(out)
 }

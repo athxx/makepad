@@ -2,9 +2,9 @@
 name = "makepad-xr"
 version = "1.0.0"
 authors = ["Makepad <info@makepad.nl>"]
-edition = "2021"
+edition = "2024"
 description = "Reusable XR scene components for Makepad"
-license = "MPL-2.0"
+license = "LGPL-3.0"
 
 [features]
 lz4_force_scalar = ["makepad-lz4/force-scalar"]

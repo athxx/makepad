@@ -9,7 +9,7 @@ use crate::math_internal::{make_diagonal_matrix, TrianglePoint};
 use crate::types::{RayCastInput, TriangleFeature};
 
 /// https://en.wikipedia.org/wiki/Pi
-pub const PI: f32 = 3.14159265359;
+pub const PI: f32 = std::f32::consts::PI;
 
 /// Convenience constant to convert from degrees to radians.
 pub const DEG_TO_RAD: f32 = 0.01745329251;

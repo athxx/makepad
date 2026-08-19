@@ -2,12 +2,15 @@
 name = "makepad-platform"
 version = "2.0.0"
 authors = ["Makepad <info@makepad.nl>"]
-edition = "2021"
+edition = "2024"
 description = "Makepad platform layer"
-license = "MPL-2.0"
-homepage = "https://github.com/makepad/makepad/"
-repository = "https://github.com/makepad/makepad/"
+license = "LGPL-3.0"
+homepage = "https://github.com/visokit/viso/"
+repository = "https://github.com/visokit/viso/"
 metadata.makepad-auto-version = "ue5pTU0e_KaMiNqLQpo2CaD-WeQ="
+
+[lints.rust]
+unsafe_op_in_unsafe_fn = "allow"
 
 [dependencies]
 makepad-studio-protocol = { path = "./studio", version = "0.1.0" }
@@ -20,8 +23,8 @@ makepad-script = { path="./script", version="1.0.0"}
 makepad-live-reload-core = { path = "../libs/live_reload_core", version = "0.1.0" }
 makepad-zune-png = { path = "../libs/zune/zune-png", version = "0.5.2" }
 makepad-tsdf = { path = "../libs/tsdf", version = "0.1.0" }
-smallvec = { version = "1.15", path = "../libs/smallvec" }
-bitflags = { version = "2.10", path = "../libs/bitflags" }
+smallvec = { version = "1.15" }
+bitflags = { version = "2.10" }
 
 [target.wasm32-unknown-unknown.dependencies]
 makepad-wasm-bridge = { path = "../libs/wasm_bridge", version = "1.0.0" }

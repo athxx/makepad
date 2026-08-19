@@ -31,7 +31,7 @@ keywords = [
     "no_std",
 ]
 categories = ["data-structures"]
-license = "MPL-2.0"
+license = "LGPL-3.0"
 repository = "https://github.com/servo/rust-smallvec"
 
 [package.metadata.docs.rs]

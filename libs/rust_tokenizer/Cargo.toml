@@ -2,11 +2,11 @@
 name = "makepad-rust-tokenizer"
 version = "1.0.0"
 authors = ["Makepad <info@makepad.nl>"]
-edition = "2021"
+edition = "2024"
 description = "Makepad rust tokenizer"
-license = "MPL-2.0"
-homepage = "https://github.com/makepad/makepad/"
-repository = "https://github.com/makepad/makepad/"
+license = "LGPL-3.0"
+homepage = "https://github.com/visokit/viso/"
+repository = "https://github.com/visokit/viso/"
 metadata.makepad-auto-version = "oD0L5c3G2VuWsqkFkpgKSat_PMo="
 
 [dependencies]

@@ -1565,6 +1565,8 @@ mod tests {
             size_in_lpxs: Size::new(0.0, 0.0),
             rows: Vec::new(),
             is_truncated: false,
+            missing_scripts: Vec::new(),
+            missing_emoji: false,
         })
     }
 

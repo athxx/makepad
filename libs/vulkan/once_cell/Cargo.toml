@@ -10,8 +10,7 @@
 # See Cargo.toml.orig for the original contents.
 
 [package]
-edition = "2021"
-rust-version = "1.65"
+edition = "2024"
 name = "once_cell"
 version = "1.21.3"
 authors = ["Aleksey Kladov <aleksey.kladov@gmail.com>"]
@@ -38,7 +37,7 @@ categories = [
     "rust-patterns",
     "memory-management",
 ]
-license = "MPL-2.0"
+license = "LGPL-3.0"
 repository = "https://github.com/matklad/once_cell"
 
 [package.metadata.docs.rs]

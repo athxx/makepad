@@ -10,8 +10,7 @@
 # See Cargo.toml.orig for the original contents.
 
 [package]
-edition = "2021"
-rust-version = "1.82"
+edition = "2024"
 name = "windows-strings"
 version = "0.5.1"
 build = false
@@ -23,7 +22,7 @@ autobenches = false
 description = "Windows string types"
 readme = "readme.md"
 categories = ["os::windows-apis"]
-license = "MPL-2.0"
+license = "LGPL-3.0"
 repository = "https://github.com/microsoft/windows-rs"
 
 [package.metadata.docs.rs]
@@ -41,8 +40,6 @@ path = "src/lib.rs"
 [dependencies.windows-link]
 version = "0.2.1"
 default-features = false
-
-path = "../windows-link"
 [lints.rust]
 missing_unsafe_on_extern = "warn"
 

@@ -286,13 +286,13 @@ fn main() {
     }
 
     println!("\ngenerator");
-    let gen = &out.generator;
+    let r#gen = &out.generator;
     all_ok &= compare(
         "har_source",
-        &gen.har_source,
+        &r#gen.har_source,
         "decoder_decoder_generator_m_source_l_tanh_Tanh_output_0",
     );
-    all_ok &= compare("ups.0", &gen.ups[0].data, "decoder_decoder_generator_ups.0_ConvTranspose_output_0");
+    all_ok &= compare("ups.0", &r#gen.ups[0].data, "decoder_decoder_generator_ups.0_ConvTranspose_output_0");
 
     // The forward STFT's phase rows cannot be compared entrywise: wherever a
     // bin is near zero — always at DC and Nyquist, whose imaginary part is
@@ -311,8 +311,8 @@ fn main() {
             return;
         }
     };
-    let frames = gen.har.cols;
-    let bins = gen.har.rows / 2;
+    let frames = r#gen.har.cols;
+    let bins = r#gen.har.rows / 2;
     let complex = |mag_phase: &[f32]| -> Vec<f32> {
         let mut out = Vec::with_capacity(2 * bins * frames);
         for bin in 0..bins {
@@ -346,7 +346,7 @@ fn main() {
     // amplifies that several-fold. The strict `stft` row above pins the
     // transform; this row only guards against gross regressions.
     const HAR_TOLERANCE: f32 = 1e-2;
-    let (worst, _) = max_abs_diff(&complex(&gen.har.data), &complex(&ref_har.data));
+    let (worst, _) = max_abs_diff(&complex(&r#gen.har.data), &complex(&ref_har.data));
     let har_ok = worst <= HAR_TOLERANCE;
     println!(
         "  har        {}  max|Δ|={worst:.3e} as complex re/im (tolerance {HAR_TOLERANCE:.0e})",
@@ -361,11 +361,11 @@ fn main() {
     let mut flip_err = 0f32;
     for bin in 0..bins {
         for t in 0..frames {
-            let ours_phase = gen.har.at(bins + bin, t);
+            let ours_phase = r#gen.har.at(bins + bin, t);
             let ref_phase = ref_har.data[(bins + bin) * frames + t];
             if (ours_phase - ref_phase).abs() > 0.5 {
                 flipped += 1;
-                let mag_ours = gen.har.at(bin, t);
+                let mag_ours = r#gen.har.at(bin, t);
                 let mag_ref = ref_har.data[bin * frames + t];
                 let dre = mag_ours * ours_phase.cos() - mag_ref * ref_phase.cos();
                 let dim = mag_ours * ours_phase.sin() - mag_ref * ref_phase.sin();
@@ -383,7 +383,7 @@ fn main() {
     let spliced =
         decoder
             .generator
-            .run_from_har(&out.decode[3], decoder_style, gen.har_source.clone(), ref_har_mat);
+            .run_from_har(&out.decode[3], decoder_style, r#gen.har_source.clone(), ref_har_mat);
     for index in 0..2 {
         all_ok &= compare(
             &format!("noise{index}"),
@@ -413,9 +413,9 @@ fn main() {
     // End to end with our own STFT — informational: the flipped entries inject
     // localized differences the strict rows above have already accounted for.
     let reference = Npy::load("kokoro_ref.npy").expect("kokoro_ref.npy");
-    let (e2e_max, at) = max_abs_diff(&gen.waveform, &reference.data);
+    let (e2e_max, at) = max_abs_diff(&r#gen.waveform, &reference.data);
     let rms = {
-        let sum: f32 = gen
+        let sum: f32 = r#gen
             .waveform
             .iter()
             .zip(&reference.data)

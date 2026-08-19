@@ -1,9 +1,9 @@
 [package]
 name = "makepad-converse"
 version = "0.1.0"
-edition = "2021"
+edition = "2024"
 description = "Conversational voice pipeline for Makepad apps: streamed agent replies spoken as they arrive, with a pluggable transcript filter between speech-to-text and the backend LLM."
-license = "MPL-2.0"
+license = "LGPL-3.0"
 
 [features]
 # Speech synthesis (Kokoro). Default ON so existing consumers are unchanged,

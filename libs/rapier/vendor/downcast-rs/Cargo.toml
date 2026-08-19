@@ -1,6 +1,5 @@
 [package]
-edition = "2021"
-rust-version = "1.56"
+edition = "2024"
 name = "downcast-rs"
 version = "2.0.2"
 build = false
@@ -22,7 +21,7 @@ keywords = [
     "no_std",
 ]
 categories = ["rust-patterns"]
-license = "MPL-2.0"
+license = "LGPL-3.0"
 repository = "https://github.com/marcianx/downcast-rs"
 
 [features]

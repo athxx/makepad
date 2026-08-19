@@ -722,8 +722,12 @@ impl DrawVector {
 
         let geom = self.geometry.get_or_insert_with(|| Geometry::new(cx.cx.cx));
         let mut packed = crate::vector::pack_vector_vertices(&self.acc_verts);
-        let mut indices = self.acc_indices.clone();
-        geom.update_with_recycled_buffers(cx.cx.cx, &mut indices, &mut packed);
+        // Hand acc_indices directly to the recycler (as DrawPbr::flush does):
+        // update_with_recycled_buffers swaps our buffer into its own storage and
+        // clears what it returns, and begin() re-clears acc_indices next frame,
+        // so the prior `self.acc_indices.clone()` was a redundant per-flush
+        // allocation + memcpy proportional to the index count.
+        geom.update_with_recycled_buffers(cx.cx.cx, &mut self.acc_indices, &mut packed);
         self.draw_vars.geometry_id = Some(geom.geometry_id());
         cx.new_draw_call(&self.draw_vars);
         if self.draw_vars.can_instance() {

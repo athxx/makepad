@@ -424,7 +424,7 @@ impl<'a, T> PtrInner<'a, [T]> {
     }
 
     /// Iteratively projects the elements `PtrInner<T>` from `PtrInner<[T]>`.
-    pub(crate) fn iter(&self) -> impl Iterator<Item = PtrInner<'a, T>> {
+    pub(crate) fn iter(&self) -> impl Iterator<Item = PtrInner<'a, T>> + use<'a, T> {
         // FIXME(#429): Once `NonNull::cast` documents that it preserves
         // provenance, cite those docs.
         let base = self.as_non_null().cast::<T>().as_ptr();

@@ -11,7 +11,6 @@
 
 [package]
 edition = "2018"
-rust-version = "1.31"
 name = "pkg-config"
 version = "0.3.32"
 authors = ["Alex Crichton <alex@alexcrichton.com>"]
@@ -28,7 +27,7 @@ Cargo build scripts.
 documentation = "https://docs.rs/pkg-config"
 readme = "README.md"
 keywords = ["build-dependencies"]
-license = "MPL-2.0"
+license = "LGPL-3.0"
 repository = "https://github.com/rust-lang/pkg-config-rs"
 
 [lib]

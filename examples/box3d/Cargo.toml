@@ -2,9 +2,9 @@
 name = "makepad-example-box3d"
 version = "0.1.0"
 authors = ["Makepad <info@makepad.nl>"]
-edition = "2021"
+edition = "2024"
 description = "Box3D physics simulation rendered in 3D with makepad"
-license = "MPL-2.0"
+license = "LGPL-3.0"
 
 [dependencies]
 makepad-widgets = { path = "../../widgets", version = "2.0.0" }

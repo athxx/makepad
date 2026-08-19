@@ -10,8 +10,7 @@
 # See Cargo.toml.orig for the original contents.
 
 [package]
-edition = "2021"
-rust-version = "1.60"
+edition = "2024"
 name = "num-traits"
 version = "0.2.20"
 authors = ["The Rust Project Developers"]
@@ -33,7 +32,7 @@ categories = [
     "science",
     "no-std",
 ]
-license = "MPL-2.0"
+license = "LGPL-3.0"
 repository = "https://github.com/rust-num/num-traits"
 
 [package.metadata.docs.rs]

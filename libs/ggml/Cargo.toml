@@ -1,7 +1,7 @@
 [package]
 name = "makepad-ggml"
 version = "0.1.0"
-edition = "2021"
+edition = "2024"
 description = "Metal-first, backend-neutral ggml runtime for Makepad"
 license = "MIT"
 
@@ -17,7 +17,7 @@ makepad-cuda = { path = "../cuda" }
 
 [target.'cfg(any(target_os = "macos", target_os = "ios"))'.dependencies]
 makepad-objc-sys = { path = "../objc-sys", version = "1.0.0" }
-smallvec = { path = "../smallvec" }
+smallvec = { version = "1.15" }
 
 [[bin]]
 name = "q4-mm-bench"

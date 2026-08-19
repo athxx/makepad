@@ -10,8 +10,7 @@
 # See Cargo.toml.orig for the original contents.
 
 [package]
-edition = "2021"
-rust-version = "1.65"
+edition = "2024"
 name = "wayland-client"
 version = "0.31.12"
 authors = ["Elinor Berger <elinor@safaradeg.net>"]

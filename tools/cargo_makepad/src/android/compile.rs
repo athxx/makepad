@@ -2505,7 +2505,8 @@ pub fn build_aab(
 
     if let Some(icon) = resolve_app_icon_env(build_crate)? {
         for (var, value) in APP_ICON_ENV_VARS.iter().zip(icon.iter()) {
-            std::env::set_var(var, value);
+            // SAFETY: build-tool driver; env is mutated before worker threads spawn.
+            unsafe { std::env::set_var(var, value); }
         }
     }
 
@@ -2666,7 +2667,8 @@ pub fn build(
 
     if let Some(icon) = resolve_app_icon_env(build_crate)? {
         for (var, value) in APP_ICON_ENV_VARS.iter().zip(icon.iter()) {
-            std::env::set_var(var, value);
+            // SAFETY: build-tool driver; env is mutated before worker threads spawn.
+            unsafe { std::env::set_var(var, value); }
         }
     }
 

@@ -306,14 +306,14 @@ impl<'a> Lexer<'a> {
                 let save_pos2 = self.pos;
                 self.skip_whitespace();
                 if !self.is_eof() && self.data[self.pos].is_ascii_digit() {
-                    let gen = self.read_number_value()?;
-                    if let PdfObj::Int(gen_num) = gen {
+                    let r#gen = self.read_number_value()?;
+                    if let PdfObj::Int(gen_num) = r#gen {
                         self.skip_whitespace();
                         if !self.is_eof() && self.data[self.pos] == b'R' {
                             self.pos += 1;
                             return Ok(PdfObj::Ref(ObjRef {
                                 num: obj_num as u32,
-                                gen: gen_num as u16,
+                                r#gen: gen_num as u16,
                             }));
                         }
                     }
