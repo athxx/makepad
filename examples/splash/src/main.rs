@@ -40,7 +40,7 @@ script_mod! {
             text_style: TextStyle{
                 font_family: FontFamily{
                     latin := FontMember{
-                        res: crate_resource("self:../../widgets/resources/jetbrains_mono_variable.ttf")
+                        res: system_font("ui", 400, false)
                         asc: 0.0
                         desc: 0.0
                         weight: 400.0
@@ -798,7 +798,7 @@ script_mod! {
                     text_style: TextStyle{
                         font_family: FontFamily{
                             latin := FontMember{
-                                res: crate_resource("self:../../widgets/resources/jetbrains_mono_variable.ttf")
+                                res: system_font("ui", 400, false)
                                 asc: 0.0
                                 desc: 0.0
                                 weight: 200.0
@@ -818,7 +818,7 @@ script_mod! {
                     text_style: TextStyle{
                         font_family: FontFamily{
                             latin := FontMember{
-                                res: crate_resource("self:../../widgets/resources/jetbrains_mono_variable.ttf")
+                                res: system_font("ui", 400, false)
                                 asc: 0.0
                                 desc: 0.0
                                 weight: 400.0
@@ -838,7 +838,7 @@ script_mod! {
                     text_style: TextStyle{
                         font_family: FontFamily{
                             latin := FontMember{
-                                res: crate_resource("self:../../widgets/resources/jetbrains_mono_variable.ttf")
+                                res: system_font("ui", 400, false)
                                 asc: 0.0
                                 desc: 0.0
                                 weight: 700.0
@@ -858,7 +858,7 @@ script_mod! {
                     text_style: TextStyle{
                         font_family: FontFamily{
                             latin := FontMember{
-                                res: crate_resource("self:../../widgets/resources/jetbrains_mono_variable.ttf")
+                                res: system_font("ui", 400, false)
                                 asc: 0.0
                                 desc: 0.0
                                 weight: 900.0
@@ -882,7 +882,7 @@ script_mod! {
                     text_style: TextStyle{
                         font_family: FontFamily{
                             latin := FontMember{
-                                res: crate_resource("self:../../widgets/resources/jetbrains_mono_variable.ttf")
+                                res: system_font("ui", 400, false)
                                 asc: 0.0
                                 desc: 0.0
                                 weight: 200.0
@@ -902,7 +902,7 @@ script_mod! {
                     text_style: TextStyle{
                         font_family: FontFamily{
                             latin := FontMember{
-                                res: crate_resource("self:../../widgets/resources/jetbrains_mono_variable.ttf")
+                                res: system_font("ui", 400, false)
                                 asc: 0.0
                                 desc: 0.0
                                 weight: 400.0
@@ -922,7 +922,7 @@ script_mod! {
                     text_style: TextStyle{
                         font_family: FontFamily{
                             latin := FontMember{
-                                res: crate_resource("self:../../widgets/resources/jetbrains_mono_variable.ttf")
+                                res: system_font("ui", 400, false)
                                 asc: 0.0
                                 desc: 0.0
                                 weight: 700.0
@@ -942,7 +942,7 @@ script_mod! {
                     text_style: TextStyle{
                         font_family: FontFamily{
                             latin := FontMember{
-                                res: crate_resource("self:../../widgets/resources/jetbrains_mono_variable.ttf")
+                                res: system_font("ui", 400, false)
                                 asc: 0.0
                                 desc: 0.0
                                 weight: 900.0

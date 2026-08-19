@@ -24,7 +24,7 @@ script_mod! {
         draw_text +: {
             text_style: TextStyle{
                 font_family: FontFamily{
-                    latin := FontMember{res: crate_resource("self:resources/NewCMMath-Regular.otf") asc: 0.0 desc: 0.0}
+                    latin := FontMember{res: system_font("serif", 400, false) asc: 0.0 desc: 0.0}
                 }
                 font_size: 11.0
                 line_spacing: 1.2
