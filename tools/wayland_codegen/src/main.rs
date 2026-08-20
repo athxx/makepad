@@ -5,19 +5,19 @@ use std::{
     path::{Path, PathBuf},
 };
 
-#[path = "../../../libs/linux/wayland-scanner/src/c_interfaces.rs"]
+#[path = "../../../vendor/linux/wayland-scanner/src/c_interfaces.rs"]
 mod c_interfaces;
-#[path = "../../../libs/linux/wayland-scanner/src/client_gen.rs"]
+#[path = "../../../vendor/linux/wayland-scanner/src/client_gen.rs"]
 mod client_gen;
-#[path = "../../../libs/linux/wayland-scanner/src/common.rs"]
+#[path = "../../../vendor/linux/wayland-scanner/src/common.rs"]
 mod common;
-#[path = "../../../libs/linux/wayland-scanner/src/interfaces.rs"]
+#[path = "../../../vendor/linux/wayland-scanner/src/interfaces.rs"]
 mod interfaces;
-#[path = "../../../libs/linux/wayland-scanner/src/parse.rs"]
+#[path = "../../../vendor/linux/wayland-scanner/src/parse.rs"]
 mod parse;
-#[path = "../../../libs/linux/wayland-scanner/src/protocol.rs"]
+#[path = "../../../vendor/linux/wayland-scanner/src/protocol.rs"]
 mod protocol;
-#[path = "../../../libs/linux/wayland-scanner/src/util.rs"]
+#[path = "../../../vendor/linux/wayland-scanner/src/util.rs"]
 mod util;
 
 #[derive(Copy, Clone, PartialEq, Eq, Debug)]
@@ -28,9 +28,9 @@ enum Side {
 
 fn main() -> io::Result<()> {
     let root = find_repo_root()?;
-    let wayland_root = root.join("libs/linux/wayland-protocols");
+    let wayland_root = root.join("vendor/linux/wayland-protocols");
     let protocols = wayland_root.join("protocols");
-    let wayland_client_root = root.join("libs/linux/wayland-client");
+    let wayland_client_root = root.join("vendor/linux/wayland-client");
 
     let wp_rs = generate_wp(&protocols)?;
     let xdg_rs = generate_xdg(&protocols)?;
@@ -46,13 +46,13 @@ fn main() -> io::Result<()> {
 fn find_repo_root() -> io::Result<PathBuf> {
     let mut dir = env::current_dir()?;
     loop {
-        if dir.join("libs/linux/wayland-protocols").is_dir() {
+        if dir.join("vendor/linux/wayland-protocols").is_dir() {
             return Ok(dir);
         }
         if !dir.pop() {
             return Err(io::Error::new(
                 io::ErrorKind::NotFound,
-                "could not find repo root containing libs/linux/wayland-protocols",
+                "could not find repo root containing vendor/linux/wayland-protocols",
             ));
         }
     }

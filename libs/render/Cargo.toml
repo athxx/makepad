@@ -16,7 +16,7 @@ makepad-fast-inflate = { path = "../fast_inflate" }
 # can be judged by eye without a Cx or the app. Dev-only, so the shipped crate
 # stays on the two deps above.
 [dev-dependencies]
-jpeg-encoder = { path = "../jpeg-encoder" }
+jpeg-encoder = { path = "../../vendor/jpeg-encoder" }
 # The skinned-GLB writer round-trip gate (tests/skin_writer_roundtrip.rs):
 # libs/gltf writes, skin.rs parses. Dev-only — the shipped crate keeps its
 # small dep surface.

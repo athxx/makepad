@@ -42,5 +42,5 @@ path = "src/lib.rs"
 proc-macro = true
 
 [dependencies.makepad-micro-proc-macro]
-path = "../../micro_proc_macro"
+path = "../../../libs/micro_proc_macro"
 version = "1.0.0"

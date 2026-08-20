@@ -8,7 +8,7 @@ license = "MIT OR Apache-2.0"
 [dependencies]
 
 [target.'cfg(windows)'.dependencies.windows]
-path = "../../libs/windows/windows-rs"
+path = "../../vendor/windows/windows-rs"
 version = "0.62.2"
 # Same Media Foundation surface as platform's windows dep so the vendored
 # windows crate enables IMFSinkWriter / source-reader (H3 mux).

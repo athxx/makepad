@@ -6,4 +6,4 @@ description = "Focused OpenEXR scanline reader/writer for Makepad"
 
 [dependencies]
 makepad-fast-inflate = { path = "../fast_inflate" }
-makepad-half = { path = "../vulkan/makepad-half" }
+makepad-half = { path = "../../vendor/vulkan/makepad-half" }

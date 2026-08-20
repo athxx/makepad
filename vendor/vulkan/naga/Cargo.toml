@@ -130,7 +130,7 @@ version = "2.8"
 default-features = false
 
 [dependencies.makepad-error-log]
-path = "../../error_log"
+path = "../../../libs/error_log"
 version = "1.0.0"
 
 [dependencies.num-traits]

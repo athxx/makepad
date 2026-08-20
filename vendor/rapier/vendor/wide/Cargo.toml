@@ -49,7 +49,7 @@ path = "tests/all_tests/main.rs"
 
 [dependencies.bytemuck]
 version = "1"
-path = "../../../../libs/bytemuck"
+path = "../../../bytemuck"
 
 [dependencies.safe_arch]
 version = "0.7"

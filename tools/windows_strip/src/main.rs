@@ -1691,7 +1691,7 @@ fn resolve_support_crate_source(windows_source_root: &Path, crate_spec: Vendored
 }
 
 fn vendored_crate_root(crate_spec: VendoredCrate) -> PathBuf {
-    Path::new("./libs/windows").join(crate_spec.local_dir)
+    Path::new("./vendor/windows").join(crate_spec.local_dir)
 }
 
 fn copy_tree(src_root: &Path, dst_root: &Path) -> io::Result<()> {
@@ -1725,7 +1725,7 @@ fn remove_legacy_flat_vendored_dirs() {
         }
     }
     for dir_name in LEGACY_WINDOWS_SUBDIRS {
-        let legacy = Path::new("./libs/windows").join(dir_name);
+        let legacy = Path::new("./vendor/windows").join(dir_name);
         if legacy.exists() {
             fs::remove_dir_all(legacy).unwrap();
         }

@@ -8,7 +8,7 @@ license = "LGPL-3.0"
 [dependencies]
 
 [target.'cfg(windows)'.dependencies.windows]
-path = "../windows/windows-rs"
+path = "../../vendor/windows/windows-rs"
 version = "0.62.2"
 features = [
     "Win32_Foundation",

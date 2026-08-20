@@ -18,7 +18,7 @@ TGS-soft-family), one untimed warm-up step then min-of-4 timed runs, all
 builds same-session single-threaded on the same machine (Apple Silicon,
 release + fat LTO). The box3d default build includes the checked-in PGO
 profile (see the performance section); the plain column is the same code
-without it. Reproduce with `libs/rapier/crates/bench`:
+without it. Reproduce with `vendor/rapier/crates/bench`:
 
 | scene | box3d (default build) | box3d no-PGO | box3d C `-O3` | rapier |
 |---|---|---|---|---|
@@ -40,7 +40,7 @@ profile-guided — PGO-ing it would claw back some margin; against plain
 ### Full nine-scene matrix vs Rapier (single-threaded)
 
 The same comparison extended to every scene in the benchmark suite, with
-the original C Box3D added as a third column (`libs/rapier/crates/bench`
+the original C Box3D added as a third column (`vendor/rapier/crates/bench`
 mirrors all nine box3d scenes with identical geometry, densities, filters
 and body/collider/joint counts — counts verified equal on every scene).
 Single-threaded, measured 2026-07-06 as one same-window interleaved run

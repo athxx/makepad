@@ -94,10 +94,10 @@ makepad-strict-json = { path = "../../strict_json" }
 # Reuse-group UDP bind for the fleet beacon listener (several apps on one
 # machine listen at once); the client crate owns that socket helper.
 makepad-asset-client = { path = "../../asset/client" }
-makepad-zune-core = { path = "../../zune/zune-core" }
-makepad-zune-png = { path = "../../zune/zune-png" }
+makepad-zune-core = { path = "../../../vendor/zune/zune-core" }
+makepad-zune-png = { path = "../../../vendor/zune/zune-png" }
 # Vision-domain request images arrive as PNG or JPEG.
-makepad-zune-jpeg = { path = "../../zune/zune-jpeg" }
+makepad-zune-jpeg = { path = "../../../vendor/zune/zune-jpeg" }
 makepad-zip-file = { path = "../../zip_file" }
 # Music reference clips arrive as any audio file the in-repo decoders read
 # (MP3 / FLAC / Ogg Vorbis here, WAV in crate::wav). No deps, no unsafe.

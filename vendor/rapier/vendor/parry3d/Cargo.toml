@@ -90,14 +90,14 @@ path = "../approx"
 [dependencies.arrayvec]
 version = "0.7"
 default-features = false
-path = "../../../../libs/vulkan/arrayvec"
+path = "../../../vulkan/arrayvec"
 [dependencies.bitflags]
 version = "2.3"
 [dependencies.bytemuck]
 version = "1"
 features = ["derive"]
 optional = true
-path = "../../../../libs/bytemuck"
+path = "../../../bytemuck"
 [dependencies.downcast-rs]
 version = "2"
 features = ["sync"]
@@ -123,15 +123,15 @@ path = "../glamx"
 [dependencies.indexmap]
 version = "2"
 optional = true
-path = "../../../../libs/vulkan/indexmap"
+path = "../../../vulkan/indexmap"
 [dependencies.foldhash]
 version = "0.2.0"
 default-features = false
-path = "../../../../libs/vulkan/foldhash"
+path = "../../../vulkan/foldhash"
 [dependencies.hashbrown]
 version = "0.16.1"
 default-features = false
-path = "../../../../libs/vulkan/hashbrown"
+path = "../../../vulkan/hashbrown"
 [dependencies.log]
 package = "makepad-error-log"
 path = "../../../../libs/error_log"

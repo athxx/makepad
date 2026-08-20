@@ -78,7 +78,7 @@ path = "../approx"
 version = "1"
 features = ["derive"]
 optional = true
-path = "../../../../libs/bytemuck"
+path = "../../../bytemuck"
 [dependencies.glam]
 version = "0.30"
 default-features = false

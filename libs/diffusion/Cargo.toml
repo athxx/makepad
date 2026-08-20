@@ -29,8 +29,8 @@ makepad-ai-speech = { path = "../ai/models/speech" }
 makepad-ai-trellis = { path = "../ai/models/trellis" }
 makepad-gltf = { path = "../gltf" }
 makepad-micro-serde = { path = "../micro_serde" }
-makepad-zune-core = { path = "../zune/zune-core" }
-makepad-zune-png = { path = "../zune/zune-png" }
+makepad-zune-core = { path = "../../vendor/zune/zune-core" }
+makepad-zune-png = { path = "../../vendor/zune/zune-png" }
 
 [workspace]
 

@@ -6,6 +6,6 @@ description = "MB3D fractal renderer - parses M3P files, ray-marches fractals, o
 
 [dependencies]
 makepad-openexr = { path = "../openexr" }
-makepad-zune-png = { path = "../zune/zune-png" }
-makepad-zune-core = { path = "../zune/zune-core" }
+makepad-zune-png = { path = "../../vendor/zune/zune-png" }
+makepad-zune-core = { path = "../../vendor/zune/zune-core" }
 makepad-math = { path = "../math" }
