@@ -13,4 +13,4 @@ makepad-game-sim = { path = "../sim" }
 # can be judged by eye without a Cx or the app. Dev-only, so the shipped crate
 # stays on the two deps above.
 [dev-dependencies]
-jpeg-encoder = { path = "../../jpeg-encoder" }
+jpeg-encoder = { path = "../../../vendor/jpeg-encoder" }

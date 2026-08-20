@@ -104,7 +104,7 @@ path = "../approx"
 [dependencies.bytemuck]
 version = "1.5"
 optional = true
-path = "../../../../libs/bytemuck"
+path = "../../../bytemuck"
 [dependencies.glam030]
 version = "0.30"
 optional = true

@@ -21,7 +21,7 @@ makepad-network = { path = "./network", version = "1.0.0", features = ["script"]
 makepad-video = { path = "./video", version = "1.0.0" }
 makepad-script = { path="./script", version="1.0.0"}
 makepad-live-reload-core = { path = "../libs/live_reload_core", version = "0.1.0" }
-makepad-zune-png = { path = "../libs/zune/zune-png", version = "0.5.2" }
+makepad-zune-png = { path = "../vendor/zune/zune-png", version = "0.5.2" }
 makepad-tsdf = { path = "../libs/tsdf", version = "0.1.0" }
 smallvec = { version = "1.15" }
 bitflags = { version = "2.10" }
@@ -57,24 +57,24 @@ makepad-objc-sys = { path = "../libs/objc-sys", version = "1.0.0" }
 makepad-apple-sys = { path = "../libs/apple_sys", version = "1.0.0" }
 
 [target.aarch64-unknown-linux-gnu.dependencies]
-wayland-client = { path = "../libs/linux/wayland-client" }
-wayland-protocols = { path = "../libs/linux/wayland-protocols", features = ["client", "unstable", "staging"] }
-wayland-egl = { path = "../libs/linux/wayland-egl" }
-naga = { path = "../libs/vulkan/naga", version = "27.0", features = ["wgsl-in", "spv-out"]}
+wayland-client = { path = "../vendor/linux/wayland-client" }
+wayland-protocols = { path = "../vendor/linux/wayland-protocols", features = ["client", "unstable", "staging"] }
+wayland-egl = { path = "../vendor/linux/wayland-egl" }
+naga = { path = "../vendor/vulkan/naga", version = "27.0", features = ["wgsl-in", "spv-out"]}
 
 [target.x86_64-unknown-linux-gnu.dependencies]
-wayland-client = { path = "../libs/linux/wayland-client" }
-wayland-protocols = { path = "../libs/linux/wayland-protocols", features = ["client", "unstable", "staging"] }
-wayland-egl = { path = "../libs/linux/wayland-egl" }
-naga = { path = "../libs/vulkan/naga", version = "27.0", features = ["wgsl-in", "spv-out"]}
+wayland-client = { path = "../vendor/linux/wayland-client" }
+wayland-protocols = { path = "../vendor/linux/wayland-protocols", features = ["client", "unstable", "staging"] }
+wayland-egl = { path = "../vendor/linux/wayland-egl" }
+naga = { path = "../vendor/vulkan/naga", version = "27.0", features = ["wgsl-in", "spv-out"]}
 
 [target.'cfg(target_os = "android")'.dependencies]
 ## Note: we must not use local 'path' dependencies on `makepad-jni-sys` or `makepad-android-state`
 ## in order to guarantee that only one instance of each crate exists in the app binary.
 makepad-jni-sys = {version = "0.4.0"}
 makepad-android-state = {version = "0.1.0"}
-naga = { path = "../libs/vulkan/naga", version = "27.0", features = ["wgsl-in", "spv-out"]}
-ash = { path = "../libs/vulkan/ash", version = "0.38" }
+naga = { path = "../vendor/vulkan/naga", version = "27.0", features = ["wgsl-in", "spv-out"]}
+ash = { path = "../vendor/vulkan/ash", version = "0.38" }
 
 [target.'cfg(target_env = "ohos")'.dependencies]
 hilog-sys = "0.1.1"
@@ -90,11 +90,11 @@ path = "../libs/futures_legacy"
 version = "1.0.0"
 
 [target.'cfg(windows)'.dependencies.windows-core]
-path = "../libs/windows/windows-core"
+path = "../vendor/windows/windows-core"
 version = "0.62.2"
 
 [target.'cfg(windows)'.dependencies.windows]
-path = "../libs/windows/windows-rs"
+path = "../vendor/windows/windows-rs"
 version = "0.62.2"
 features = [
     "Win32_Foundation",

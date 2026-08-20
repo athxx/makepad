@@ -753,7 +753,7 @@ fn run_client(addr: &str, cmd_args: &[String], is_shell: bool) -> io::Result<i32
             continue;
         }
         let normalized = rel_path.replace('\\', "/");
-        let is_vendored = normalized.starts_with("libs/linux/");
+        let is_vendored = normalized.starts_with("vendor/linux/");
         let is_common_src = normalized.ends_with(".rs") || normalized.ends_with(".toml");
         if !is_tracked {
             if is_vendored {

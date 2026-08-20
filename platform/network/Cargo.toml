@@ -20,7 +20,7 @@ path = "../../libs/futures_legacy"
 version = "1.0.0"
 
 [target.'cfg(windows)'.dependencies.windows]
-path = "../../libs/windows/windows-rs"
+path = "../../vendor/windows/windows-rs"
 version = "0.62.2"
 features = [
     "Foundation",

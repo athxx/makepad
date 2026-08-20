@@ -41,7 +41,7 @@ features = ["extern_crate_alloc"]
 
 [dependencies.makepad-error-log]
 version = "1.0.0"
-path = "../error_log"
+path = "../../libs/error_log"
 
 [dependencies.smallvec]
 version = "1.6"

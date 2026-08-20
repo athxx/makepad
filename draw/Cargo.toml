@@ -15,19 +15,19 @@ makepad-math = { path = "../libs/math", version = "1.0.0" }
 makepad-svg = { path = "../libs/svg", version = "1.0.0" }
 makepad-live-id = { path = "../libs/live_id", version = "1.0.0" }
 
-rustybuzz = { version = "0.18.0", path = "../libs/rustybuzz" }
-unicode-bidi = { version = "0.3", path = "../libs/unicode/unicode-bidi" }
-ab_glyph_rasterizer = { version = "0.1.8", path = "../libs/ab_glyph_rasterizer"}
-sdfer = { path = "../libs/sdfer", version = "0.2.1" }
-fxhash = { version = "0.2.1", path = "../libs/fxhash" }
-unicode-linebreak = { version = "0.1.5", path = "../libs/unicode/unicode-linebreak" }
-unicode-segmentation = { version = "1.12.0", path = "../libs/unicode/unicode-segmentation" }
-unicode-script = { version = "0.5.8", path = "../libs/unicode/unicode-script" }
-makepad-zune-png = { version = "0.5.2", path = "../libs/zune/zune-png" }
-makepad-zune-jpeg = { version = "0.5.15", path = "../libs/zune/zune-jpeg" }
-makepad-zune-bmp = { version = "0.5.2", path = "../libs/zune/zune-bmp" }
-makepad-zune-qoi = { version = "0.5.2", path = "../libs/zune/zune-qoi" }
-makepad-webp = { version = "0.2.4", path = "../libs/webp" }
+rustybuzz = { version = "0.18.0", path = "../vendor/rustybuzz" }
+unicode-bidi = { version = "0.3", path = "../vendor/unicode/unicode-bidi" }
+ab_glyph_rasterizer = { version = "0.1.8", path = "../vendor/ab_glyph_rasterizer"}
+sdfer = { path = "../vendor/sdfer", version = "0.2.1" }
+fxhash = { version = "0.2.1", path = "../vendor/fxhash" }
+unicode-linebreak = { version = "0.1.5", path = "../vendor/unicode/unicode-linebreak" }
+unicode-segmentation = { version = "1.12.0", path = "../vendor/unicode/unicode-segmentation" }
+unicode-script = { version = "0.5.8", path = "../vendor/unicode/unicode-script" }
+makepad-zune-png = { version = "0.5.2", path = "../vendor/zune/zune-png" }
+makepad-zune-jpeg = { version = "0.5.15", path = "../vendor/zune/zune-jpeg" }
+makepad-zune-bmp = { version = "0.5.2", path = "../vendor/zune/zune-bmp" }
+makepad-zune-qoi = { version = "0.5.2", path = "../vendor/zune/zune-qoi" }
+makepad-webp = { version = "0.2.4", path = "../vendor/webp" }
 makepad-gif = { version = "0.1.0", path = "../libs/gif" }
 
 serde = { version = "1.0", optional = true, features = ["derive"] }

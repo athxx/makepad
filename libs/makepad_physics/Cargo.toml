@@ -9,4 +9,4 @@ license = "LGPL-3.0"
 makepad-math = { path = "../math" }
 
 [dev-dependencies]
-rapier3d = { path = "../../libs/rapier/crates/rapier3d" }
+rapier3d = { path = "../../vendor/rapier/crates/rapier3d" }

@@ -13,8 +13,8 @@ makepad-llama = { path = "../llama" }
 makepad-mlx = { path = "../mlx" }
 makepad-gltf = { path = "../gltf" }
 makepad-micro-serde = { path = "../micro_serde" }
-makepad-zune-core = { path = "../zune/zune-core" }
-makepad-zune-png = { path = "../zune/zune-png" }
+makepad-zune-core = { path = "../../vendor/zune/zune-core" }
+makepad-zune-png = { path = "../../vendor/zune/zune-png" }
 
 [workspace]
 

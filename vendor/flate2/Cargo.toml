@@ -126,7 +126,7 @@ default-features = false
 
 [dependencies.miniz_oxide]
 version = "0.8.5"
-path = "../miniz_oxide"
+path = "../../libs/miniz_oxide"
 features = [
     "with-alloc",
     "simd",

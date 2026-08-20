@@ -65,7 +65,7 @@ features = [
 ]
 optional = true
 default-features = false
-path = "../../../../libs/bytemuck"
+path = "../../../bytemuck"
 [dependencies.libm]
 version = "0.2"
 optional = true

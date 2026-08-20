@@ -15,4 +15,4 @@ repository = "https://github.com/visokit/viso/"
 brotli-decompressor = { version = "5.0", default-features = false, features = ["std"] }
 
 [dev-dependencies]
-rustybuzz = { version = "0.18.0", path = "../rustybuzz" }
+rustybuzz = { version = "0.18.0", path = "../../vendor/rustybuzz" }

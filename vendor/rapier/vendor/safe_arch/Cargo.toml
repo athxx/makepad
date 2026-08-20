@@ -55,7 +55,7 @@ path = "tests/integration/main.rs"
 [dependencies.bytemuck]
 version = "1.2"
 optional = true
-path = "../../../../libs/bytemuck"
+path = "../../../bytemuck"
 
 [features]
 default = []

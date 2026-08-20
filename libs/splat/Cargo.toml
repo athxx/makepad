@@ -11,4 +11,4 @@ repository = "https://github.com/visokit/viso/"
 [dependencies]
 makepad-micro-serde = { path = "../micro_serde", version = "1.0.0" }
 makepad-zip-file = { path = "../zip_file", version = "1.0.0" }
-makepad-webp = { path = "../webp", version = "0.2.4" }
+makepad-webp = { path = "../../vendor/webp", version = "0.2.4" }
