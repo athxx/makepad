@@ -795,8 +795,8 @@ script_mod! {
             text_style: theme.font_regular{font_size: 8.5}
         }
         draw_item_text +: {
-            hover: instance(0.0)
-            active: instance(0.0)
+            hover: 0.0
+            active: 0.0
             color: #xc6cfd8
             color_hover: #xe6ebf0
             color_active: #xe6ebf0
@@ -851,15 +851,15 @@ script_mod! {
             border_color: #xffffff22
         }
         draw_item +: {
-            hover: instance(0.0)
-            active: instance(0.0)
+            hover: 0.0
+            active: 0.0
             color: #x00000000
             color_hover: #x2a2a32
             color_active: #x243044
         }
         draw_scroll_arrow +: {
-            up: instance(0.0)
-            enabled: instance(1.0)
+            up: 0.0
+            enabled: 1.0
             color: #xc6cfd8
             color_disabled: #x4a5158
         }

@@ -48,10 +48,8 @@ use makepad_diffusion::da3::{
 #[cfg(feature = "depth-native")]
 use makepad_diffusion::DiffusionError;
 use std::path::PathBuf;
-use std::time::Duration;
 
 pub const DEPTH_CMD_ENV: &str = "MAKEPAD_DEPTH_CMD";
-const DEPTH_CMD_DEFAULT: &str = r"C:\ai\venv\Scripts\python.exe C:\ai\depth_da3.py {in} {out}";
 
 /// Per-job budget: warm inference is seconds; cold covers the model load
 /// from the box HF cache on a slow disk.

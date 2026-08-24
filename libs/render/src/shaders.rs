@@ -943,10 +943,10 @@ script_mod! {
         csm_map: texture_2d(float)
         // Q3 / Unreal detail overlay. Last texture so CSM stays slot 4.
         detail_map: texture_2d(float)
-        detail_st: instance(vec2(0.0, 0.0))
+        detail_st: vec2(0.0, 0.0)
         // 1 = COLOR_0 is a baked lightmap (Q3 worlds). Analytic sun
         // leaves inward vaults black; the tint already *is* the light.
-        prelit: instance(0.0)
+        prelit: 0.0
         csm_p: uniform(vec4(0.0, 0.001, 0.0, 0.0))
         csm_bias: uniform(vec4(0.001, 0.001, 0.001, 0.0))
         csm_rx0: uniform(vec4(1.0, 0.0, 0.0, 0.0))
