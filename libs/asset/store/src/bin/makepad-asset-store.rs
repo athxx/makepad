@@ -33,7 +33,7 @@ extern "C" fn on_signal(_sig: i32) {
 fn install_signal_handlers() {
     #[cfg(unix)]
     {
-        extern "C" {
+        unsafe extern "C" {
             fn signal(signum: i32, handler: usize) -> usize;
         }
         const SIGINT: i32 = 2;

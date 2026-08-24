@@ -5346,6 +5346,89 @@ pub fn main() {
         println!("shader capacity + loud-failure tests passed");
     }
 
+    // ========================================
+    // Regression: assigning a shader-IO object to an ALREADY-DECLARED rust
+    // instance field must be a type error.
+    //
+    // A `#[derive(Script)] #[repr(C)]` draw struct's `#[live]` fields are
+    // registered as instance IO by the derive macro. `shader.instance(v)`
+    // (and uniform/varying/...) return a NEW shader-IO OBJECT and exist only
+    // to INTRODUCE new properties. Wrapping a pre-declared scalar field like
+    // `child_field: f32` in `shader.instance(0.0)` assigns that object to the
+    // f32 prop, which set_value_shallow_checked must reject:
+    //   "type mismatch for property "child_field": expected f32, got object".
+    //
+    // This was the real bug behind the app/render "expected f32, got object"
+    // shader spam (asset-ui DropDown2 draw_item hover/active, DrawSceneSkinned
+    // detail_st/prelit): the DSL re-wrapped rust fields in instance(...).
+    // The fix is to assign a plain value; the base widgets already did.
+    // ========================================
+    println!("Running instance-on-typed-field regression test...");
+    {
+        // --- Negative case: instance() on a declared f32 field must error. ---
+        let bad = r#"
+        use mod.shader
+        use mod.pod.*
+        use mod.math.*
+
+        let bad = #(0){
+            child_field: shader.instance(0.0)
+        }
+    "#
+        .to_string();
+        vm.bx.captured_errors = Some(Vec::new());
+        let script_mod = ScriptMod {
+            cargo_manifest_path: env!("CARGO_MANIFEST_DIR").to_string(),
+            module_path: "instance_on_typed_field".to_string(),
+            file: "instance_on_typed_field_bad.rs".to_string(),
+            line: 1,
+            column: 1,
+            code: bad,
+            values: vec![ShaderTest2::script_shader(vm)],
+        };
+        vm.eval(script_mod);
+        let errors = vm.take_errors();
+        assert!(
+            errors.iter().any(|e| e.contains("type mismatch")
+                && e.contains("child_field")
+                && e.contains("expected f32")
+                && e.contains("got object")),
+            "instance() on a declared f32 field must be a type error, got: {:?}",
+            errors
+        );
+
+        // --- Positive case: a plain value on the same field must NOT error. ---
+        let good = r#"
+        use mod.shader
+        use mod.pod.*
+        use mod.math.*
+
+        let good = #(0){
+            child_field: 0.0
+        }
+    "#
+        .to_string();
+        vm.bx.captured_errors = Some(Vec::new());
+        let script_mod = ScriptMod {
+            cargo_manifest_path: env!("CARGO_MANIFEST_DIR").to_string(),
+            module_path: "instance_on_typed_field".to_string(),
+            file: "instance_on_typed_field_good.rs".to_string(),
+            line: 1,
+            column: 1,
+            code: good,
+            values: vec![ShaderTest2::script_shader(vm)],
+        };
+        vm.eval(script_mod);
+        let errors = vm.take_errors();
+        assert!(
+            errors.is_empty(),
+            "plain value on a declared f32 field must not error, got: {:?}",
+            errors
+        );
+
+        println!("instance-on-typed-field regression test passed");
+    }
+
     println!("Test done");
 
     // ========================================
