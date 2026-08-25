@@ -265,11 +265,11 @@ impl PresetBank {
     }
 
     pub fn current_path(&self) -> PathBuf {
-        self.dir.join("current.ron")
+        self.dir.join("current.json")
     }
 
     pub fn slot_path(&self, slot: usize) -> PathBuf {
-        self.dir.join(format!("preset_{slot:02}.ron"))
+        self.dir.join(format!("preset_{slot:02}.json"))
     }
 
     pub fn load_current(&self) -> Option<ControllerState> {
@@ -299,11 +299,11 @@ impl PresetBank {
 
 fn load_state_file(path: &Path) -> Option<ControllerState> {
     let text = std::fs::read_to_string(path).ok()?;
-    ControllerState::deserialize_ron(&text).ok()
+    ControllerState::deserialize_json(&text).ok()
 }
 
 fn save_state_file(path: &Path, state: &ControllerState) {
-    let _ = std::fs::write(path, state.serialize_ron().as_bytes());
+    let _ = std::fs::write(path, state.serialize_json().as_bytes());
 }
 
 #[derive(Clone, Debug)]

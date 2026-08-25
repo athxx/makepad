@@ -1,13 +1,5 @@
 use makepad_live_id::LiveId;
-use std::{
-    collections::HashMap,
-    hash::Hash,
-    marker::PhantomData,
-    mem::MaybeUninit,
-    ops::Deref,
-    ptr,
-    str,
-};
+use std::{collections::HashMap, hash::Hash, mem::MaybeUninit, ptr, str};
 
 #[cfg(unix)]
 use std::{
@@ -20,298 +12,12 @@ fn span_fits(offset: usize, len: usize, total: usize) -> bool {
     offset <= total && len <= total - offset
 }
 
-const MANUAL_SIMD_COPY_MIN: usize = 128;
-const MANUAL_SIMD_COPY_MAX: usize = 16 * 1024;
-
-#[inline(always)]
-unsafe fn copy_tail_unaligned(mut dst: *mut u8, mut src: *const u8, mut len: usize) {
-    unsafe {
-        while len >= 8 {
-            (dst as *mut u64).write_unaligned((src as *const u64).read_unaligned());
-            dst = dst.add(8);
-            src = src.add(8);
-            len -= 8;
-        }
-        if len >= 4 {
-            (dst as *mut u32).write_unaligned((src as *const u32).read_unaligned());
-            dst = dst.add(4);
-            src = src.add(4);
-            len -= 4;
-        }
-        if len >= 2 {
-            (dst as *mut u16).write_unaligned((src as *const u16).read_unaligned());
-            dst = dst.add(2);
-            src = src.add(2);
-            len -= 2;
-        }
-        if len != 0 {
-            dst.write(src.read());
-        }
-    }
-}
-
-#[cfg(any(target_arch = "x86", target_arch = "x86_64"))]
-#[target_feature(enable = "avx2")]
-unsafe fn copy_avx2(mut dst: *mut u8, mut src: *const u8, mut len: usize) {
-    #[cfg(target_arch = "x86")]
-    use std::arch::x86::*;
-    #[cfg(target_arch = "x86_64")]
-    use std::arch::x86_64::*;
-
-    unsafe {
-        while len >= 128 {
-            let a = _mm256_loadu_si256(src as *const __m256i);
-            let b = _mm256_loadu_si256(src.add(32) as *const __m256i);
-            let c = _mm256_loadu_si256(src.add(64) as *const __m256i);
-            let d = _mm256_loadu_si256(src.add(96) as *const __m256i);
-            _mm256_storeu_si256(dst as *mut __m256i, a);
-            _mm256_storeu_si256(dst.add(32) as *mut __m256i, b);
-            _mm256_storeu_si256(dst.add(64) as *mut __m256i, c);
-            _mm256_storeu_si256(dst.add(96) as *mut __m256i, d);
-            src = src.add(128);
-            dst = dst.add(128);
-            len -= 128;
-        }
-        while len >= 32 {
-            let value = _mm256_loadu_si256(src as *const __m256i);
-            _mm256_storeu_si256(dst as *mut __m256i, value);
-            src = src.add(32);
-            dst = dst.add(32);
-            len -= 32;
-        }
-        copy_tail_unaligned(dst, src, len);
-        _mm256_zeroupper();
-    }
-}
-
-#[cfg(any(target_arch = "x86", target_arch = "x86_64"))]
-#[target_feature(enable = "sse2")]
-unsafe fn copy_sse2(mut dst: *mut u8, mut src: *const u8, mut len: usize) {
-    #[cfg(target_arch = "x86")]
-    use std::arch::x86::*;
-    #[cfg(target_arch = "x86_64")]
-    use std::arch::x86_64::*;
-
-    unsafe {
-        while len >= 64 {
-            let a = _mm_loadu_si128(src as *const __m128i);
-            let b = _mm_loadu_si128(src.add(16) as *const __m128i);
-            let c = _mm_loadu_si128(src.add(32) as *const __m128i);
-            let d = _mm_loadu_si128(src.add(48) as *const __m128i);
-            _mm_storeu_si128(dst as *mut __m128i, a);
-            _mm_storeu_si128(dst.add(16) as *mut __m128i, b);
-            _mm_storeu_si128(dst.add(32) as *mut __m128i, c);
-            _mm_storeu_si128(dst.add(48) as *mut __m128i, d);
-            src = src.add(64);
-            dst = dst.add(64);
-            len -= 64;
-        }
-        while len >= 16 {
-            let value = _mm_loadu_si128(src as *const __m128i);
-            _mm_storeu_si128(dst as *mut __m128i, value);
-            src = src.add(16);
-            dst = dst.add(16);
-            len -= 16;
-        }
-        copy_tail_unaligned(dst, src, len);
-    }
-}
-
-#[cfg(all(target_arch = "aarch64", target_feature = "neon"))]
-#[target_feature(enable = "neon")]
-unsafe fn copy_neon_aarch64(mut dst: *mut u8, mut src: *const u8, mut len: usize) {
-    use std::arch::aarch64::{vld1q_u8, vst1q_u8};
-
-    unsafe {
-        while len >= 64 {
-            let a = vld1q_u8(src);
-            let b = vld1q_u8(src.add(16));
-            let c = vld1q_u8(src.add(32));
-            let d = vld1q_u8(src.add(48));
-            vst1q_u8(dst, a);
-            vst1q_u8(dst.add(16), b);
-            vst1q_u8(dst.add(32), c);
-            vst1q_u8(dst.add(48), d);
-            src = src.add(64);
-            dst = dst.add(64);
-            len -= 64;
-        }
-        while len >= 16 {
-            let value = vld1q_u8(src);
-            vst1q_u8(dst, value);
-            src = src.add(16);
-            dst = dst.add(16);
-            len -= 16;
-        }
-        copy_tail_unaligned(dst, src, len);
-    }
-}
-
-#[inline]
-unsafe fn fast_copy_nonoverlapping(src: *const u8, dst: *mut u8, len: usize) {
-    if len == 0 {
-        return;
-    }
-
-    // Large copies are left to the platform memcpy (ERMS/wider SIMD/cache
-    // tuning); the hand-written path targets the medium-size hot range.
-    if (MANUAL_SIMD_COPY_MIN..=MANUAL_SIMD_COPY_MAX).contains(&len) {
-        #[cfg(any(target_arch = "x86", target_arch = "x86_64"))]
-        {
-            if std::arch::is_x86_feature_detected!("avx2") {
-                unsafe { copy_avx2(dst, src, len) };
-                return;
-            }
-            #[cfg(target_arch = "x86_64")]
-            {
-                unsafe { copy_sse2(dst, src, len) };
-                return;
-            }
-            #[cfg(target_arch = "x86")]
-            if std::arch::is_x86_feature_detected!("sse2") {
-                unsafe { copy_sse2(dst, src, len) };
-                return;
-            }
-        }
-
-        #[cfg(all(target_arch = "aarch64", target_feature = "neon"))]
-        {
-            unsafe { copy_neon_aarch64(dst, src, len) };
-            return;
-        }
-
-    }
-
-    unsafe { ptr::copy_nonoverlapping(src, dst, len) };
-}
-
-#[cfg(any(target_arch = "x86", target_arch = "x86_64"))]
-#[target_feature(enable = "avx2")]
-unsafe fn normalize_bool_avx2(mut dst: *mut u8, mut src: *const u8, mut len: usize) {
-    #[cfg(target_arch = "x86")]
-    use std::arch::x86::*;
-    #[cfg(target_arch = "x86_64")]
-    use std::arch::x86_64::*;
-
-    unsafe {
-        let zero = _mm256_setzero_si256();
-        let one = _mm256_set1_epi8(1);
-        while len >= 32 {
-            let value = _mm256_loadu_si256(src as *const __m256i);
-            let is_zero = _mm256_cmpeq_epi8(value, zero);
-            let normalized = _mm256_andnot_si256(is_zero, one);
-            _mm256_storeu_si256(dst as *mut __m256i, normalized);
-            src = src.add(32);
-            dst = dst.add(32);
-            len -= 32;
-        }
-        while len != 0 {
-            dst.write((src.read() != 0) as u8);
-            src = src.add(1);
-            dst = dst.add(1);
-            len -= 1;
-        }
-        _mm256_zeroupper();
-    }
-}
-
-#[cfg(any(target_arch = "x86", target_arch = "x86_64"))]
-#[target_feature(enable = "sse2")]
-unsafe fn normalize_bool_sse2(mut dst: *mut u8, mut src: *const u8, mut len: usize) {
-    #[cfg(target_arch = "x86")]
-    use std::arch::x86::*;
-    #[cfg(target_arch = "x86_64")]
-    use std::arch::x86_64::*;
-
-    unsafe {
-        let zero = _mm_setzero_si128();
-        let one = _mm_set1_epi8(1);
-        while len >= 16 {
-            let value = _mm_loadu_si128(src as *const __m128i);
-            let is_zero = _mm_cmpeq_epi8(value, zero);
-            let normalized = _mm_andnot_si128(is_zero, one);
-            _mm_storeu_si128(dst as *mut __m128i, normalized);
-            src = src.add(16);
-            dst = dst.add(16);
-            len -= 16;
-        }
-        while len != 0 {
-            dst.write((src.read() != 0) as u8);
-            src = src.add(1);
-            dst = dst.add(1);
-            len -= 1;
-        }
-    }
-}
-
-#[cfg(all(target_arch = "aarch64", target_feature = "neon"))]
-#[target_feature(enable = "neon")]
-unsafe fn normalize_bool_neon_aarch64(
-    mut dst: *mut u8,
-    mut src: *const u8,
-    mut len: usize,
-) {
-    use std::arch::aarch64::{vandq_u8, vceqq_u8, vdupq_n_u8, vld1q_u8, vmvnq_u8, vst1q_u8};
-
-    unsafe {
-        let zero = vdupq_n_u8(0);
-        let one = vdupq_n_u8(1);
-        while len >= 16 {
-            let value = vld1q_u8(src);
-            let normalized = vandq_u8(vmvnq_u8(vceqq_u8(value, zero)), one);
-            vst1q_u8(dst, normalized);
-            src = src.add(16);
-            dst = dst.add(16);
-            len -= 16;
-        }
-        while len != 0 {
-            dst.write((src.read() != 0) as u8);
-            src = src.add(1);
-            dst = dst.add(1);
-            len -= 1;
-        }
-    }
-}
-
-#[inline]
-unsafe fn normalize_bool_bytes(dst: *mut u8, src: *const u8, len: usize) {
-    #[cfg(any(target_arch = "x86", target_arch = "x86_64"))]
-    {
-        if len >= 32 && std::arch::is_x86_feature_detected!("avx2") {
-            unsafe { normalize_bool_avx2(dst, src, len) };
-            return;
-        }
-        #[cfg(target_arch = "x86_64")]
-        if len >= 16 {
-            unsafe { normalize_bool_sse2(dst, src, len) };
-            return;
-        }
-        #[cfg(target_arch = "x86")]
-        if len >= 16 && std::arch::is_x86_feature_detected!("sse2") {
-            unsafe { normalize_bool_sse2(dst, src, len) };
-            return;
-        }
-    }
-
-    #[cfg(all(target_arch = "aarch64", target_feature = "neon"))]
-    if len >= 16 {
-        unsafe { normalize_bool_neon_aarch64(dst, src, len) };
-        return;
-    }
-
-    unsafe {
-        for index in 0..len {
-            dst.add(index).write((src.add(index).read() != 0) as u8);
-        }
-    }
-}
-
 #[inline(always)]
 unsafe fn append_bytes_unchecked(out: &mut Vec<u8>, src: *const u8, len: usize) {
     let old_len = out.len();
     debug_assert!(len <= out.capacity() - old_len);
     unsafe {
-        fast_copy_nonoverlapping(src, out.as_mut_ptr().add(old_len), len);
+        ptr::copy_nonoverlapping(src, out.as_mut_ptr().add(old_len), len);
         out.set_len(old_len + len);
     }
 }
@@ -350,26 +56,12 @@ const fn sat_mul_usize(a: usize, b: usize) -> usize {
 pub trait SerBin {
     #[inline]
     fn serialize_bin(&self) -> Vec<u8> {
-        let mut out = Vec::with_capacity(self.ser_bin_size_hint());
+        // The in-memory size is a cheap, allocation-free starting estimate for
+        // derived structs. Variable-sized built-ins reserve a tighter amount in
+        // their own `ser_bin` implementations.
+        let mut out = Vec::with_capacity(std::mem::size_of_val(self));
         self.ser_bin(&mut out);
         out
-    }
-
-    /// Append to an existing output buffer.
-    #[inline]
-    fn serialize_bin_to(&self, out: &mut Vec<u8>) {
-        self.ser_bin(out);
-    }
-
-    /// Clear and reuse an existing allocation.
-    #[inline]
-    fn serialize_bin_reuse(&self, out: &mut Vec<u8>) {
-        out.clear();
-        let hint = self.ser_bin_size_hint();
-        if out.capacity() < hint {
-            out.reserve(hint);
-        }
-        self.ser_bin(out);
     }
 
     fn ser_bin(&self, out: &mut Vec<u8>);
@@ -645,7 +337,7 @@ macro_rules! impl_ser_de_bin_for {
                 let old_len = out.len();
                 out.reserve(count);
                 unsafe {
-                    fast_copy_nonoverlapping(
+                    ptr::copy_nonoverlapping(
                         data.as_ptr().add(start),
                         out.as_mut_ptr().add(old_len).cast::<u8>(),
                         byte_len,
@@ -708,7 +400,7 @@ macro_rules! impl_ser_de_bin_for {
                 let byte_len = N * WIDTH;
                 let mut out = MaybeUninit::<[$ty; N]>::uninit();
                 unsafe {
-                    fast_copy_nonoverlapping(
+                    ptr::copy_nonoverlapping(
                         data.as_ptr().add(start),
                         out.as_mut_ptr().cast::<u8>(),
                         byte_len,
@@ -823,7 +515,7 @@ impl DeBin for usize {
 
         #[cfg(all(target_pointer_width = "64", target_endian = "little"))]
         unsafe {
-            fast_copy_nonoverlapping(
+            ptr::copy_nonoverlapping(
                 data.as_ptr().add(start),
                 out.as_mut_ptr().add(old_len).cast::<u8>(),
                 byte_len,
@@ -868,7 +560,7 @@ impl DeBin for usize {
 
         #[cfg(all(target_pointer_width = "64", target_endian = "little"))]
         unsafe {
-            fast_copy_nonoverlapping(
+            ptr::copy_nonoverlapping(
                 data.as_ptr().add(start),
                 out.as_mut_ptr().cast::<u8>(),
                 N * WIDTH,
@@ -1049,7 +741,7 @@ impl DeBin for u8 {
         }
         let mut out = MaybeUninit::<[u8; N]>::uninit();
         unsafe {
-            fast_copy_nonoverlapping(data.as_ptr().add(start), out.as_mut_ptr().cast::<u8>(), N);
+            ptr::copy_nonoverlapping(data.as_ptr().add(start), out.as_mut_ptr().cast::<u8>(), N);
         }
         *offset = start + N;
         Ok(unsafe { out.assume_init() })
@@ -1101,7 +793,7 @@ impl DeBin for i8 {
         let old_len = out.len();
         out.reserve(count);
         unsafe {
-            fast_copy_nonoverlapping(
+            ptr::copy_nonoverlapping(
                 data.as_ptr().add(start),
                 out.as_mut_ptr().add(old_len).cast::<u8>(),
                 count,
@@ -1123,7 +815,7 @@ impl DeBin for i8 {
         }
         let mut out = MaybeUninit::<[i8; N]>::uninit();
         unsafe {
-            fast_copy_nonoverlapping(data.as_ptr().add(start), out.as_mut_ptr().cast::<u8>(), N);
+            ptr::copy_nonoverlapping(data.as_ptr().add(start), out.as_mut_ptr().cast::<u8>(), N);
         }
         *offset = start + N;
         Ok(unsafe { out.assume_init() })
@@ -1175,14 +867,12 @@ impl DeBin for bool {
         }
         let old_len = out.len();
         out.reserve(count);
-        unsafe {
-            normalize_bool_bytes(
-                out.as_mut_ptr().add(old_len).cast::<u8>(),
-                data.as_ptr().add(start),
-                count,
-            );
-            out.set_len(old_len + count);
+        let dst = unsafe { out.as_mut_ptr().add(old_len) };
+        for index in 0..count {
+            let value = unsafe { *data.get_unchecked(start + index) != 0 };
+            unsafe { dst.add(index).write(value) };
         }
+        unsafe { out.set_len(old_len + count) };
         *offset = start + count;
         Ok(())
     }
@@ -1197,12 +887,10 @@ impl DeBin for bool {
             return Err(de_bin_error(start, 1, data.len(), "bool"));
         }
         let mut out = MaybeUninit::<[bool; N]>::uninit();
-        unsafe {
-            normalize_bool_bytes(
-                out.as_mut_ptr().cast::<u8>(),
-                data.as_ptr().add(start),
-                N,
-            );
+        let dst = out.as_mut_ptr().cast::<bool>();
+        for index in 0..N {
+            let value = unsafe { *data.get_unchecked(start + index) != 0 };
+            unsafe { dst.add(index).write(value) };
         }
         *offset = start + N;
         Ok(unsafe { out.assume_init() })
@@ -1842,698 +1530,6 @@ pub fn utf8_char_width(byte: u8) -> usize {
         0xe0..=0xef => 3,
         0xf0..=0xf4 => 4,
         _ => 0,
-    }
-}
-
-mod zero_copy_sealed {
-    pub trait Sealed {}
-}
-
-/// Fixed-width scalar values that can be read directly from little-endian wire
-/// bytes. The trait is sealed so all supported bit patterns are known-valid.
-#[allow(private_bounds)]
-pub trait ZeroCopyScalar: zero_copy_sealed::Sealed + Copy + 'static {
-    const WIDTH: usize;
-    const NAME: &'static str;
-
-    /// # Safety
-    /// `src` must point to at least `WIDTH` readable bytes.
-    unsafe fn read_le_unchecked(src: *const u8) -> Self;
-}
-
-macro_rules! impl_zero_copy_scalar {
-    ($($ty:ty),* $(,)?) => {$(
-        impl zero_copy_sealed::Sealed for $ty {}
-
-        impl ZeroCopyScalar for $ty {
-            const WIDTH: usize = std::mem::size_of::<$ty>();
-            const NAME: &'static str = stringify!($ty);
-
-            #[inline(always)]
-            unsafe fn read_le_unchecked(src: *const u8) -> Self {
-                const WIDTH: usize = std::mem::size_of::<$ty>();
-                let bytes = unsafe { (src as *const [u8; WIDTH]).read_unaligned() };
-                <$ty>::from_le_bytes(bytes)
-            }
-        }
-
-        impl<'a> DeBinZeroCopy<'a> for $ty {
-            #[inline(always)]
-            fn de_bin_zero_copy(reader: &mut BinReader<'a>) -> Result<Self, DeBinErr> {
-                reader.read_scalar()
-            }
-        }
-    )* };
-}
-
-impl_zero_copy_scalar!(u8, i8, u16, i16, u32, i32, u64, i64, f32, f64);
-
-/// Bounds-checked cursor for borrowed and zero-copy binary decoding.
-#[derive(Clone, Copy)]
-pub struct BinReader<'a> {
-    data: &'a [u8],
-    offset: usize,
-}
-
-impl<'a> BinReader<'a> {
-    #[inline(always)]
-    pub const fn new(data: &'a [u8]) -> Self {
-        Self { data, offset: 0 }
-    }
-
-    #[inline(always)]
-    pub const fn with_offset(data: &'a [u8], offset: usize) -> Self {
-        Self { data, offset }
-    }
-
-    #[inline(always)]
-    pub const fn data(&self) -> &'a [u8] {
-        self.data
-    }
-
-    #[inline(always)]
-    pub const fn offset(&self) -> usize {
-        self.offset
-    }
-
-    #[inline(always)]
-    pub fn remaining_len(&self) -> usize {
-        self.data.len().saturating_sub(self.offset)
-    }
-
-    #[inline(always)]
-    pub fn remaining(&self) -> &'a [u8] {
-        &self.data[self.offset.min(self.data.len())..]
-    }
-
-    #[inline]
-    pub fn finish(self) -> Result<(), DeBinErr> {
-        if self.offset == self.data.len() {
-            Ok(())
-        } else {
-            Err(de_bin_error(
-                self.offset,
-                self.data.len().saturating_sub(self.offset),
-                self.data.len(),
-                "trailing bytes",
-            ))
-        }
-    }
-
-    #[inline]
-    pub fn read_exact(
-        &mut self,
-        len: usize,
-        what: &'static str,
-    ) -> Result<&'a [u8], DeBinErr> {
-        let start = self.offset;
-        if !span_fits(start, len, self.data.len()) {
-            return Err(de_bin_error(start, len.max(1), self.data.len(), what));
-        }
-        self.offset = start + len;
-        Ok(unsafe { std::slice::from_raw_parts(self.data.as_ptr().add(start), len) })
-    }
-
-    #[inline(always)]
-    pub fn read_scalar<T: ZeroCopyScalar>(&mut self) -> Result<T, DeBinErr> {
-        let start = self.offset;
-        if !span_fits(start, T::WIDTH, self.data.len()) {
-            return Err(de_bin_error(start, T::WIDTH, self.data.len(), T::NAME));
-        }
-        let value = unsafe { T::read_le_unchecked(self.data.as_ptr().add(start)) };
-        self.offset = start + T::WIDTH;
-        Ok(value)
-    }
-
-    #[inline]
-    pub fn read_len(&mut self, what: &'static str) -> Result<usize, DeBinErr> {
-        let start = self.offset;
-        let len = self.read_scalar::<u64>()?;
-        if len > usize::MAX as u64 {
-            return Err(de_bin_error(start, 8, self.data.len(), what));
-        }
-        Ok(len as usize)
-    }
-
-    /// Read the `Vec<u8>` / `String` wire shape (`u64 length + bytes`) without
-    /// copying its payload.
-    #[inline]
-    pub fn read_bytes(&mut self) -> Result<&'a [u8], DeBinErr> {
-        let len = self.read_len("byte length exceeds usize")?;
-        self.read_exact(len, "byte slice exceeds buffer")
-    }
-
-    /// Borrow a length-prefixed UTF-8 string from the input.
-    #[inline]
-    pub fn read_str(&mut self) -> Result<&'a str, DeBinErr> {
-        let payload_offset = self.offset.saturating_add(8);
-        let bytes = self.read_bytes()?;
-        str::from_utf8(bytes).map_err(|_| {
-            de_bin_error(
-                payload_offset,
-                bytes.len(),
-                self.data.len(),
-                "string is not valid utf8",
-            )
-        })
-    }
-
-    /// Borrow a length-prefixed vector of fixed-width scalars. Unaligned input
-    /// remains zero-copy: `get`/`iter` use unaligned loads on demand.
-    #[inline]
-    pub fn read_scalar_slice<T: ZeroCopyScalar>(
-        &mut self,
-    ) -> Result<ZeroCopySlice<'a, T>, DeBinErr> {
-        let count = self.read_len("scalar slice length exceeds usize")?;
-        let byte_len = count.checked_mul(T::WIDTH).ok_or_else(|| {
-            de_bin_error(
-                self.offset,
-                T::WIDTH,
-                self.data.len(),
-                "scalar slice length overflow",
-            )
-        })?;
-        let bytes = self.read_exact(byte_len, "scalar slice exceeds buffer")?;
-        Ok(ZeroCopySlice::from_wire_bytes(bytes))
-    }
-
-    /// Borrow a length-prefixed bool vector. As with the owning decoder, zero
-    /// means false and every non-zero byte means true.
-    #[inline]
-    pub fn read_bool_slice(&mut self) -> Result<ZeroCopyBoolSlice<'a>, DeBinErr> {
-        let count = self.read_len("bool slice length exceeds usize")?;
-        let bytes = self.read_exact(count, "bool slice exceeds buffer")?;
-        Ok(ZeroCopyBoolSlice { bytes })
-    }
-
-    /// Trusted-input scalar read without bounds checking.
-    ///
-    /// # Safety
-    /// At least `T::WIDTH` bytes must remain.
-    #[inline(always)]
-    pub unsafe fn read_scalar_unchecked<T: ZeroCopyScalar>(&mut self) -> T {
-        let start = self.offset;
-        let value = unsafe { T::read_le_unchecked(self.data.as_ptr().add(start)) };
-        self.offset = start.wrapping_add(T::WIDTH);
-        value
-    }
-
-    /// Trusted-input raw read without bounds checking.
-    ///
-    /// # Safety
-    /// `[offset, offset + len)` must be inside `data`.
-    #[inline(always)]
-    pub unsafe fn read_exact_unchecked(&mut self, len: usize) -> &'a [u8] {
-        let start = self.offset;
-        self.offset = start.wrapping_add(len);
-        unsafe { std::slice::from_raw_parts(self.data.as_ptr().add(start), len) }
-    }
-
-    /// Trusted-input length read without bounds/range checking.
-    ///
-    /// # Safety
-    /// Eight bytes must remain and the encoded value must fit `usize`.
-    #[inline(always)]
-    pub unsafe fn read_len_unchecked(&mut self) -> usize {
-        unsafe { self.read_scalar_unchecked::<u64>() as usize }
-    }
-
-    /// Trusted-input borrowed bytes without bounds checking.
-    ///
-    /// # Safety
-    /// The length prefix and complete payload must be present.
-    #[inline(always)]
-    pub unsafe fn read_bytes_unchecked(&mut self) -> &'a [u8] {
-        let len = unsafe { self.read_len_unchecked() };
-        unsafe { self.read_exact_unchecked(len) }
-    }
-
-    /// Trusted-input borrowed string without bounds or UTF-8 validation.
-    ///
-    /// # Safety
-    /// The complete payload must exist and be valid UTF-8.
-    #[inline(always)]
-    pub unsafe fn read_str_unchecked(&mut self) -> &'a str {
-        let bytes = unsafe { self.read_bytes_unchecked() };
-        unsafe { str::from_utf8_unchecked(bytes) }
-    }
-
-    /// Trusted-input scalar vector without bounds/overflow checking.
-    ///
-    /// # Safety
-    /// The count must fit `usize`, multiplication must not overflow, and the
-    /// complete payload must be present.
-    #[inline(always)]
-    pub unsafe fn read_scalar_slice_unchecked<T: ZeroCopyScalar>(
-        &mut self,
-    ) -> ZeroCopySlice<'a, T> {
-        let count = unsafe { self.read_len_unchecked() };
-        let byte_len = count.wrapping_mul(T::WIDTH);
-        let bytes = unsafe { self.read_exact_unchecked(byte_len) };
-        ZeroCopySlice::from_wire_bytes(bytes)
-    }
-
-    /// Trusted-input bool vector without bounds checking.
-    ///
-    /// # Safety
-    /// The count prefix and complete payload must be present.
-    #[inline(always)]
-    pub unsafe fn read_bool_slice_unchecked(&mut self) -> ZeroCopyBoolSlice<'a> {
-        let count = unsafe { self.read_len_unchecked() };
-        let bytes = unsafe { self.read_exact_unchecked(count) };
-        ZeroCopyBoolSlice { bytes }
-    }
-}
-
-/// Borrowed little-endian scalar vector.
-#[derive(Clone, Copy)]
-pub struct ZeroCopySlice<'a, T: ZeroCopyScalar> {
-    bytes: &'a [u8],
-    marker: PhantomData<T>,
-}
-
-impl<'a, T: ZeroCopyScalar> ZeroCopySlice<'a, T> {
-    #[inline(always)]
-    fn from_wire_bytes(bytes: &'a [u8]) -> Self {
-        debug_assert_eq!(bytes.len() % T::WIDTH, 0);
-        Self {
-            bytes,
-            marker: PhantomData,
-        }
-    }
-
-    #[inline(always)]
-    pub const fn as_wire_bytes(&self) -> &'a [u8] {
-        self.bytes
-    }
-
-    #[inline(always)]
-    pub fn len(&self) -> usize {
-        self.bytes.len() / T::WIDTH
-    }
-
-    #[inline(always)]
-    pub fn is_empty(&self) -> bool {
-        self.bytes.is_empty()
-    }
-
-    #[inline]
-    pub fn get(&self, index: usize) -> Option<T> {
-        if index < self.len() {
-            Some(unsafe { self.get_unchecked(index) })
-        } else {
-            None
-        }
-    }
-
-    /// # Safety
-    /// `index` must be less than `self.len()`.
-    #[inline(always)]
-    pub unsafe fn get_unchecked(&self, index: usize) -> T {
-        unsafe { T::read_le_unchecked(self.bytes.as_ptr().add(index.wrapping_mul(T::WIDTH))) }
-    }
-
-    #[inline(always)]
-    pub fn iter(&self) -> ZeroCopySliceIter<'a, T> {
-        ZeroCopySliceIter {
-            bytes: self.bytes,
-            index: 0,
-            marker: PhantomData,
-        }
-    }
-
-    /// Return a real borrowed `&[T]` when endian and alignment permit it.
-    #[inline]
-    pub fn as_native_slice(&self) -> Option<&'a [T]> {
-        #[cfg(target_endian = "little")]
-        {
-            let align = std::mem::align_of::<T>();
-            if (self.bytes.as_ptr() as usize) & (align - 1) == 0 {
-                return Some(unsafe {
-                    std::slice::from_raw_parts(self.bytes.as_ptr().cast::<T>(), self.len())
-                });
-            }
-        }
-        None
-    }
-
-    /// Materialize an owning vector. Little-endian targets use one SIMD/raw
-    /// copy; big-endian targets convert on demand.
-    #[inline]
-    pub fn to_vec(&self) -> Vec<T> {
-        let count = self.len();
-        let mut out = Vec::with_capacity(count);
-        if count == 0 {
-            return out;
-        }
-
-        #[cfg(target_endian = "little")]
-        unsafe {
-            fast_copy_nonoverlapping(
-                self.bytes.as_ptr(),
-                out.as_mut_ptr().cast::<u8>(),
-                self.bytes.len(),
-            );
-            out.set_len(count);
-        }
-
-        #[cfg(target_endian = "big")]
-        for value in self.iter() {
-            out.push(value);
-        }
-
-        out
-    }
-}
-
-impl<'a, T: ZeroCopyScalar> SerBin for ZeroCopySlice<'a, T> {
-    #[inline]
-    fn ser_bin(&self, out: &mut Vec<u8>) {
-        let required = sat_add_usize(8, self.bytes.len());
-        out.reserve(required);
-        let len = (self.len() as u64).to_le_bytes();
-        unsafe {
-            append_bytes_unchecked(out, len.as_ptr(), 8);
-            append_bytes_unchecked(out, self.bytes.as_ptr(), self.bytes.len());
-        }
-    }
-
-    #[inline(always)]
-    fn ser_bin_size_hint(&self) -> usize {
-        sat_add_usize(8, self.bytes.len())
-    }
-}
-
-pub struct ZeroCopySliceIter<'a, T: ZeroCopyScalar> {
-    bytes: &'a [u8],
-    index: usize,
-    marker: PhantomData<T>,
-}
-
-impl<'a, T: ZeroCopyScalar> Iterator for ZeroCopySliceIter<'a, T> {
-    type Item = T;
-
-    #[inline(always)]
-    fn next(&mut self) -> Option<T> {
-        let byte_offset = self.index.checked_mul(T::WIDTH)?;
-        if byte_offset >= self.bytes.len() {
-            return None;
-        }
-        self.index += 1;
-        Some(unsafe { T::read_le_unchecked(self.bytes.as_ptr().add(byte_offset)) })
-    }
-
-    #[inline(always)]
-    fn size_hint(&self) -> (usize, Option<usize>) {
-        let remaining = self.bytes.len() / T::WIDTH - self.index;
-        (remaining, Some(remaining))
-    }
-}
-
-impl<'a, T: ZeroCopyScalar> ExactSizeIterator for ZeroCopySliceIter<'a, T> {}
-impl<'a, T: ZeroCopyScalar> std::iter::FusedIterator for ZeroCopySliceIter<'a, T> {}
-
-impl<'s, 'a, T: ZeroCopyScalar> IntoIterator for &'s ZeroCopySlice<'a, T> {
-    type Item = T;
-    type IntoIter = ZeroCopySliceIter<'a, T>;
-
-    #[inline(always)]
-    fn into_iter(self) -> Self::IntoIter {
-        self.iter()
-    }
-}
-
-/// Borrowed bool vector with zero/non-zero wire semantics.
-#[derive(Clone, Copy)]
-pub struct ZeroCopyBoolSlice<'a> {
-    bytes: &'a [u8],
-}
-
-impl<'a> ZeroCopyBoolSlice<'a> {
-    #[inline(always)]
-    pub const fn as_wire_bytes(&self) -> &'a [u8] {
-        self.bytes
-    }
-
-    #[inline(always)]
-    pub const fn len(&self) -> usize {
-        self.bytes.len()
-    }
-
-    #[inline(always)]
-    pub const fn is_empty(&self) -> bool {
-        self.bytes.is_empty()
-    }
-
-    #[inline(always)]
-    pub fn get(&self, index: usize) -> Option<bool> {
-        self.bytes.get(index).map(|&value| value != 0)
-    }
-
-    #[inline(always)]
-    pub fn iter(&self) -> impl ExactSizeIterator<Item = bool> + '_ {
-        self.bytes.iter().map(|&value| value != 0)
-    }
-
-    #[inline]
-    pub fn to_vec(&self) -> Vec<bool> {
-        let mut out: Vec<bool> = Vec::with_capacity(self.bytes.len());
-        if !self.bytes.is_empty() {
-            unsafe {
-                normalize_bool_bytes(
-                    out.as_mut_ptr().cast::<u8>(),
-                    self.bytes.as_ptr(),
-                    self.bytes.len(),
-                );
-                out.set_len(self.bytes.len());
-            }
-        }
-        out
-    }
-}
-
-impl<'a> SerBin for ZeroCopyBoolSlice<'a> {
-    #[inline]
-    fn ser_bin(&self, out: &mut Vec<u8>) {
-        let required = sat_add_usize(8, self.bytes.len());
-        out.reserve(required);
-        let len = (self.bytes.len() as u64).to_le_bytes();
-        unsafe { append_bytes_unchecked(out, len.as_ptr(), 8) };
-        let old_len = out.len();
-        unsafe {
-            normalize_bool_bytes(
-                out.as_mut_ptr().add(old_len),
-                self.bytes.as_ptr(),
-                self.bytes.len(),
-            );
-            out.set_len(old_len + self.bytes.len());
-        }
-    }
-
-    #[inline(always)]
-    fn ser_bin_size_hint(&self) -> usize {
-        sat_add_usize(8, self.bytes.len())
-    }
-}
-
-#[derive(Clone, Copy)]
-pub struct ZeroCopyBytes<'a>(pub &'a [u8]);
-
-impl<'a> Deref for ZeroCopyBytes<'a> {
-    type Target = [u8];
-
-    #[inline(always)]
-    fn deref(&self) -> &Self::Target {
-        self.0
-    }
-}
-
-impl<'a> SerBin for ZeroCopyBytes<'a> {
-    #[inline]
-    fn ser_bin(&self, out: &mut Vec<u8>) {
-        let required = sat_add_usize(8, self.0.len());
-        out.reserve(required);
-        let len = (self.0.len() as u64).to_le_bytes();
-        unsafe {
-            append_bytes_unchecked(out, len.as_ptr(), 8);
-            append_bytes_unchecked(out, self.0.as_ptr(), self.0.len());
-        }
-    }
-
-    #[inline(always)]
-    fn ser_bin_size_hint(&self) -> usize {
-        sat_add_usize(8, self.0.len())
-    }
-}
-
-#[derive(Clone, Copy)]
-pub struct ZeroCopyStr<'a>(pub &'a str);
-
-impl<'a> Deref for ZeroCopyStr<'a> {
-    type Target = str;
-
-    #[inline(always)]
-    fn deref(&self) -> &Self::Target {
-        self.0
-    }
-}
-
-impl<'a> SerBin for ZeroCopyStr<'a> {
-    #[inline]
-    fn ser_bin(&self, out: &mut Vec<u8>) {
-        ZeroCopyBytes(self.0.as_bytes()).ser_bin(out);
-    }
-
-    #[inline(always)]
-    fn ser_bin_size_hint(&self) -> usize {
-        sat_add_usize(8, self.0.len())
-    }
-}
-
-/// Lifetime-aware decoding that preserves the existing owning `DeBin` API.
-pub trait DeBinZeroCopy<'a>: Sized {
-    fn de_bin_zero_copy(reader: &mut BinReader<'a>) -> Result<Self, DeBinErr>;
-
-    #[inline]
-    fn deserialize_bin_zero_copy(data: &'a [u8]) -> Result<Self, DeBinErr> {
-        let mut reader = BinReader::new(data);
-        Self::de_bin_zero_copy(&mut reader)
-    }
-
-    #[inline]
-    fn deserialize_bin_zero_copy_exact(data: &'a [u8]) -> Result<Self, DeBinErr> {
-        let mut reader = BinReader::new(data);
-        let value = Self::de_bin_zero_copy(&mut reader)?;
-        reader.finish()?;
-        Ok(value)
-    }
-}
-
-impl<'a> DeBinZeroCopy<'a> for usize {
-    #[inline]
-    fn de_bin_zero_copy(reader: &mut BinReader<'a>) -> Result<Self, DeBinErr> {
-        let start = reader.offset();
-        let value = reader.read_scalar::<u64>()?;
-        if value > usize::MAX as u64 {
-            return Err(de_bin_error(start, 8, reader.data().len(), "usize"));
-        }
-        Ok(value as usize)
-    }
-}
-
-impl<'a> DeBinZeroCopy<'a> for LiveId {
-    #[inline(always)]
-    fn de_bin_zero_copy(reader: &mut BinReader<'a>) -> Result<Self, DeBinErr> {
-        Ok(LiveId(reader.read_scalar::<u64>()?))
-    }
-}
-
-impl<'a> DeBinZeroCopy<'a> for bool {
-    #[inline(always)]
-    fn de_bin_zero_copy(reader: &mut BinReader<'a>) -> Result<Self, DeBinErr> {
-        Ok(reader.read_scalar::<u8>()? != 0)
-    }
-}
-
-impl<'a> DeBinZeroCopy<'a> for &'a [u8] {
-    #[inline(always)]
-    fn de_bin_zero_copy(reader: &mut BinReader<'a>) -> Result<Self, DeBinErr> {
-        reader.read_bytes()
-    }
-}
-
-impl<'a> DeBinZeroCopy<'a> for &'a str {
-    #[inline(always)]
-    fn de_bin_zero_copy(reader: &mut BinReader<'a>) -> Result<Self, DeBinErr> {
-        reader.read_str()
-    }
-}
-
-impl<'a> DeBinZeroCopy<'a> for ZeroCopyBytes<'a> {
-    #[inline(always)]
-    fn de_bin_zero_copy(reader: &mut BinReader<'a>) -> Result<Self, DeBinErr> {
-        Ok(Self(reader.read_bytes()?))
-    }
-}
-
-impl<'a> DeBinZeroCopy<'a> for ZeroCopyStr<'a> {
-    #[inline(always)]
-    fn de_bin_zero_copy(reader: &mut BinReader<'a>) -> Result<Self, DeBinErr> {
-        Ok(Self(reader.read_str()?))
-    }
-}
-
-impl<'a, T: ZeroCopyScalar> DeBinZeroCopy<'a> for ZeroCopySlice<'a, T> {
-    #[inline(always)]
-    fn de_bin_zero_copy(reader: &mut BinReader<'a>) -> Result<Self, DeBinErr> {
-        reader.read_scalar_slice()
-    }
-}
-
-impl<'a> DeBinZeroCopy<'a> for ZeroCopyBoolSlice<'a> {
-    #[inline(always)]
-    fn de_bin_zero_copy(reader: &mut BinReader<'a>) -> Result<Self, DeBinErr> {
-        reader.read_bool_slice()
-    }
-}
-
-impl<'a, T> DeBinZeroCopy<'a> for Option<T>
-where
-    T: DeBinZeroCopy<'a>,
-{
-    #[inline]
-    fn de_bin_zero_copy(reader: &mut BinReader<'a>) -> Result<Self, DeBinErr> {
-        let start = reader.offset();
-        match reader.read_scalar::<u8>()? {
-            0 => Ok(None),
-            1 => Ok(Some(T::de_bin_zero_copy(reader)?)),
-            _ => Err(de_bin_error(start, 1, reader.data().len(), "Option<T>")),
-        }
-    }
-}
-
-impl<'a, T, E> DeBinZeroCopy<'a> for Result<T, E>
-where
-    T: DeBinZeroCopy<'a>,
-    E: DeBinZeroCopy<'a>,
-{
-    #[inline]
-    fn de_bin_zero_copy(reader: &mut BinReader<'a>) -> Result<Self, DeBinErr> {
-        let start = reader.offset();
-        match reader.read_scalar::<u8>()? {
-            0 => Ok(Ok(T::de_bin_zero_copy(reader)?)),
-            1 => Ok(Err(E::de_bin_zero_copy(reader)?)),
-            _ => Err(de_bin_error(start, 1, reader.data().len(), "Result<T, E>")),
-        }
-    }
-}
-
-macro_rules! impl_tuple_zero_copy {
-    ($($name:ident),+ $(,)?) => {
-        impl<'a, $($name),+> DeBinZeroCopy<'a> for ($($name,)+)
-        where
-            $($name: DeBinZeroCopy<'a>,)+
-        {
-            #[inline]
-            fn de_bin_zero_copy(reader: &mut BinReader<'a>) -> Result<Self, DeBinErr> {
-                Ok(($(<$name as DeBinZeroCopy<'a>>::de_bin_zero_copy(reader)?,)+))
-            }
-        }
-    };
-}
-
-impl_tuple_zero_copy!(A, B);
-impl_tuple_zero_copy!(A, B, C);
-impl_tuple_zero_copy!(A, B, C, D);
-impl_tuple_zero_copy!(A, B, C, D, E);
-
-impl<'a, T> DeBinZeroCopy<'a> for Box<T>
-where
-    T: DeBinZeroCopy<'a>,
-{
-    #[inline]
-    fn de_bin_zero_copy(reader: &mut BinReader<'a>) -> Result<Self, DeBinErr> {
-        Ok(Box::new(T::de_bin_zero_copy(reader)?))
     }
 }
 

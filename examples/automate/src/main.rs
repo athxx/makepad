@@ -10,7 +10,7 @@ use std::time::{Duration, Instant};
 app_main!(App);
 
 const PRESET_DIR: &str = "examples/automate/local/dmx";
-const CURRENT_STATE_FILE: &str = "examples/automate/local/dmx/current.ron";
+const CURRENT_STATE_FILE: &str = "examples/automate/local/dmx/current.json";
 const DEBUG_SCENE_EVENTS: bool = true;
 
 script_mod! {
@@ -439,16 +439,16 @@ fn clamp01(value: f32) -> f32 {
 }
 
 fn preset_file(slot: usize) -> String {
-    format!("{PRESET_DIR}/preset_{slot:02}.ron")
+    format!("{PRESET_DIR}/preset_{slot:02}.json")
 }
 
 fn load_state_file(path: &str) -> Option<ControllerState> {
     let text = std::fs::read_to_string(path).ok()?;
-    ControllerState::deserialize_ron(&text).ok()
+    ControllerState::deserialize_json(&text).ok()
 }
 
 fn save_state_file(path: &str, state: &ControllerState) {
-    let _ = std::fs::write(path, state.serialize_ron().as_bytes());
+    let _ = std::fs::write(path, state.serialize_json().as_bytes());
 }
 
 fn load_preset_slot(slot: usize, state: &mut ControllerState) -> bool {

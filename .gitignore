@@ -21,11 +21,7 @@ Cargo.lock
 *.mobileprovision
 *.bat
 mandelbrot_presets.json
-makepad_settings.ron
-makepad_state*.ron
-key.ron
-dmx*.ron
-makepad_designer.ron
+*.ron
 .vscode
 rustc*.txt
 

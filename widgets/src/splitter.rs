@@ -119,7 +119,7 @@ script_mod! {
     }
 }
 
-#[derive(Copy, Clone, Debug, Script, ScriptHook, Default, SerRon, DeRon)]
+#[derive(Copy, Clone, Debug, Script, ScriptHook, Default, SerJson, DeJson)]
 #[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
 pub enum SplitterAxis {
     #[pick]
@@ -128,7 +128,7 @@ pub enum SplitterAxis {
     Vertical,
 }
 
-#[derive(Clone, Copy, Debug, Script, ScriptHook, SerRon, DeRon)]
+#[derive(Clone, Copy, Debug, Script, ScriptHook, SerJson, DeJson)]
 #[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
 pub enum SplitterAlign {
     #[live(50.0)]

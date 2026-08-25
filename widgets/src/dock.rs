@@ -536,7 +536,7 @@ impl DockItemTab {
     }
 }
 
-#[derive(Clone, Debug, SerRon, DeRon)]
+#[derive(Clone, Debug, SerJson, DeJson)]
 #[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
 pub enum DockItem {
     Splitter {
