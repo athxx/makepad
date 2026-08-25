@@ -31,6 +31,8 @@ script_mod! {
             }
 
             TextBox{height: Fit text: "UI Zoo hosts a high number of widgets and variants, resulting in loading times not representative of typical Makepad applications."}
+
+            H3{text: "fonts test: 🧘🧑 Abc 泰 สวัสดี / 天城 नमस्ते / 阿拉 مرحبا / 韩안녕하세요/ 日 こんにちは"}
         }
     }
 }

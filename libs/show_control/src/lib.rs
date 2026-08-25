@@ -80,7 +80,7 @@ impl ArtNetPacket {
     }
 }
 
-#[derive(Debug, Clone, Copy, Default, SerRon, DeRon)]
+#[derive(Debug, Clone, Copy, Default, SerJson, DeJson)]
 pub struct ControllerState {
     pub fade: [f32; 9],
     pub tempo: f32,

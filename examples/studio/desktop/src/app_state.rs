@@ -7,8 +7,8 @@ fn retain_persistable_editor_tabs(editor_tab_to_path: &mut HashMap<LiveId, Strin
     editor_tab_to_path.retain(|_, path| !App::is_terminal_virtual_path(path));
 }
 
-#[derive(SerRon, DeRon)]
-struct PersistedMountStateRon {
+#[derive(SerJson, DeJson)]
+struct PersistedMountState {
     mount: String,
     dock_items: HashMap<LiveId, DockItem>,
     editor_tab_to_path: HashMap<LiveId, String>,
@@ -20,20 +20,16 @@ struct PersistedMountStateRon {
     log_tail: bool,
 }
 
-#[derive(SerRon, DeRon)]
-struct AppStateRon {
+#[derive(SerJson, DeJson)]
+struct AppState {
     active_mount: Option<String>,
     mount_dock_items: HashMap<LiveId, DockItem>,
-    mounts: Vec<PersistedMountStateRon>,
+    mounts: Vec<PersistedMountState>,
 }
 
 impl App {
-    fn legacy_state_file_path(slot: usize) -> String {
-        format!("makepad_state{}.ron", slot)
-    }
-
     fn state_file_path(slot: usize) -> String {
-        format!(".makepad/studio_state{}.ron", slot)
+        format!(".makepad/studio_state{}.json", slot)
     }
 
     fn persistent_workspace_tab_ids(
@@ -266,12 +262,10 @@ impl App {
     }
 
     pub(super) fn load_state(&mut self, cx: &mut Cx, slot: usize) {
-        let contents = fs::read_to_string(Self::state_file_path(slot))
-            .or_else(|_| fs::read_to_string(Self::legacy_state_file_path(slot)));
-        let Ok(contents) = contents else {
+        let Ok(contents) = fs::read_to_string(Self::state_file_path(slot)) else {
             return;
         };
-        let Ok(state) = AppStateRon::deserialize_ron(&contents) else {
+        let Ok(state) = AppState::deserialize_json(&contents) else {
             return;
         };
 
@@ -293,7 +287,7 @@ impl App {
         }
         self.rebuild_mount_tab_bindings(cx);
 
-        let saved_mounts: HashMap<String, PersistedMountStateRon> = state
+        let saved_mounts: HashMap<String, PersistedMountState> = state
             .mounts
             .into_iter()
             .map(|saved| (saved.mount.clone(), saved))
@@ -370,7 +364,7 @@ impl App {
         &self,
         cx: &Cx,
         mount: &str,
-    ) -> Option<PersistedMountStateRon> {
+    ) -> Option<PersistedMountState> {
         let tab_id = self.mount_state(mount)?.tab_id?;
         let workspace = self.ui.dock(cx, ids!(mount_dock)).item(tab_id);
         let dock = workspace.dock(cx, ids!(dock));
@@ -406,7 +400,7 @@ impl App {
             .unwrap_or_default();
 
         let mount_state = self.mount_state(mount)?;
-        Some(PersistedMountStateRon {
+        Some(PersistedMountState {
             mount: mount.to_string(),
             dock_items,
             editor_tab_to_path,
@@ -437,13 +431,13 @@ impl App {
             }
         }
 
-        let state = AppStateRon {
+        let state = AppState {
             active_mount: self.data.active_mount.clone(),
             mount_dock_items,
             mounts,
         };
         let _ = fs::create_dir_all(".makepad");
-        let _ = fs::write(Self::state_file_path(slot), state.serialize_ron());
+        let _ = fs::write(Self::state_file_path(slot), state.serialize_json());
     }
 
     pub(super) fn save_state_if_needed(&mut self, cx: &mut Cx) {
@@ -472,7 +466,7 @@ mod tests {
 
     #[test]
     fn persisted_mount_state_round_trips_sidebar_restore_width() {
-        let state = PersistedMountStateRon {
+        let state = PersistedMountState {
             mount: "makepad".to_string(),
             dock_items: HashMap::new(),
             editor_tab_to_path: HashMap::new(),
@@ -484,7 +478,7 @@ mod tests {
             log_tail: true,
         };
 
-        let restored = PersistedMountStateRon::deserialize_ron(&state.serialize_ron()).unwrap();
+        let restored = PersistedMountState::deserialize_json(&state.serialize_json()).unwrap();
 
         assert_eq!(restored.sidebar_restore_width, Some(420.0));
         assert_eq!(restored.bottom_panel_restore_height, Some(260.0));
@@ -492,19 +486,19 @@ mod tests {
 
     #[test]
     fn persisted_mount_state_defaults_missing_sidebar_restore_width() {
-        let legacy = r#"
-            (
-                mount:"makepad",
-                dock_items:{},
-                editor_tab_to_path:{},
-                terminal_tab_to_path:{},
-                file_filter:"",
-                log_filter:"",
-                log_tail:true,
-            )
+        let missing_optionals = r#"
+            {
+                "mount": "makepad",
+                "dock_items": {},
+                "editor_tab_to_path": {},
+                "terminal_tab_to_path": {},
+                "file_filter": "",
+                "log_filter": "",
+                "log_tail": true
+            }
         "#;
 
-        let restored = PersistedMountStateRon::deserialize_ron(legacy).unwrap();
+        let restored = PersistedMountState::deserialize_json(missing_optionals).unwrap();
 
         assert_eq!(restored.sidebar_restore_width, None);
         assert_eq!(restored.bottom_panel_restore_height, None);

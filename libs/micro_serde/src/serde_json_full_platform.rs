@@ -1,3 +1,19 @@
+// Cross-platform high-performance JSON implementation.
+//
+// Compile-time/runtime dispatch:
+// - x86/x86_64: AVX2 -> SSE2 -> native-word SWAR.
+// - AArch64/ARM64EC with target_feature="neon": NEON -> SWAR.
+// - ARM32: optional nightly NEON when both target_feature="neon" and the
+//   Cargo feature "nightly-arm-neon" are enabled; otherwise SWAR.
+// - Every other std-capable target: endian-neutral 16/32/64-bit SWAR.
+//
+// ARM32 nightly NEON also requires this in the crate root:
+// #![cfg_attr(
+//     all(target_arch = "arm", feature = "nightly-arm-neon"),
+//     feature(stdarch_arm_neon_intrinsics)
+// )]
+// and `[features] nightly-arm-neon = []` in Cargo.toml.
+
 use makepad_live_id::LiveId;
 use std::collections::HashMap;
 use std::hash::Hash;
@@ -174,6 +190,107 @@ fn find_string_special_scalar(bytes: &[u8]) -> Option<usize> {
     bytes.iter().position(|&byte| is_string_special(byte))
 }
 
+// Portable byte-parallel fallback. This processes one native machine word at a
+// time and is used on every architecture that has no active hardware SIMD path.
+// It is endian-neutral and only performs unaligned reads inside the slice.
+#[inline(always)]
+const fn swar_repeat_byte(byte: u8) -> usize {
+    (usize::MAX / 0xff) * byte as usize
+}
+
+const SWAR_HIGH_BITS: usize = swar_repeat_byte(0x80);
+const SWAR_LOW_7_BITS: usize = swar_repeat_byte(0x7f);
+const SWAR_HIGH_3_BITS: usize = swar_repeat_byte(0xe0);
+
+/// Returns bit 7 in every byte lane whose input byte is exactly zero.
+/// Unlike the subtraction-based `has_zero_byte` trick, this form produces an
+/// exact per-lane mask, so it can also be used to locate the first matching byte.
+#[inline(always)]
+fn swar_zero_byte_high_bits(value: usize) -> usize {
+    !(((value & SWAR_LOW_7_BITS).wrapping_add(SWAR_LOW_7_BITS))
+        | value
+        | SWAR_LOW_7_BITS)
+        & SWAR_HIGH_BITS
+}
+
+#[inline(always)]
+fn swar_byte_eq_high_bits(value: usize, byte: u8) -> usize {
+    swar_zero_byte_high_bits(value ^ swar_repeat_byte(byte))
+}
+
+#[inline(always)]
+fn swar_first_marked_byte(mask: usize) -> usize {
+    debug_assert_ne!(mask, 0);
+    #[cfg(target_endian = "little")]
+    {
+        (mask.trailing_zeros() as usize) >> 3
+    }
+    #[cfg(target_endian = "big")]
+    {
+        (mask.leading_zeros() as usize) >> 3
+    }
+}
+
+#[inline]
+fn find_string_special_swar(bytes: &[u8]) -> Option<usize> {
+    const WIDTH: usize = std::mem::size_of::<usize>();
+    let mut offset = 0usize;
+
+    while offset + WIDTH <= bytes.len() {
+        // SAFETY: the loop proves a full native word is inside `bytes` and
+        // `read_unaligned` imposes no alignment requirement.
+        let word = unsafe {
+            (bytes.as_ptr().add(offset) as *const usize).read_unaligned()
+        };
+        let mask = swar_byte_eq_high_bits(word, b'"')
+            | swar_byte_eq_high_bits(word, b'\\')
+            | swar_zero_byte_high_bits(word & SWAR_HIGH_3_BITS);
+        if mask != 0 {
+            return Some(offset + swar_first_marked_byte(mask));
+        }
+        offset += WIDTH;
+    }
+
+    find_string_special_scalar(&bytes[offset..]).map(|index| offset + index)
+}
+
+#[cfg(any(target_arch = "x86", target_arch = "x86_64"))]
+#[target_feature(enable = "sse2")]
+unsafe fn find_string_special_sse2(bytes: &[u8]) -> Option<usize> {
+    #[cfg(target_arch = "x86")]
+    use std::arch::x86::*;
+    #[cfg(target_arch = "x86_64")]
+    use std::arch::x86_64::*;
+
+    // SAFETY: the caller guarantees SSE2 support; all loads are explicitly
+    // unaligned and guarded by the remaining-length check.
+    unsafe {
+        let quote = _mm_set1_epi8(b'"' as i8);
+        let slash = _mm_set1_epi8(b'\\' as i8);
+        let sign = _mm_set1_epi8(i8::MIN);
+        let control_limit = _mm_set1_epi8((0x20u8 ^ 0x80) as i8);
+        let mut offset = 0usize;
+
+        while offset + 16 <= bytes.len() {
+            let value = _mm_loadu_si128(bytes.as_ptr().add(offset) as *const __m128i);
+            let quote_mask = _mm_cmpeq_epi8(value, quote);
+            let slash_mask = _mm_cmpeq_epi8(value, slash);
+            let biased = _mm_xor_si128(value, sign);
+            let control_mask = _mm_cmpgt_epi8(control_limit, biased);
+            let mask = _mm_movemask_epi8(_mm_or_si128(
+                _mm_or_si128(quote_mask, slash_mask),
+                control_mask,
+            )) as u32;
+            if mask != 0 {
+                return Some(offset + mask.trailing_zeros() as usize);
+            }
+            offset += 16;
+        }
+
+        find_string_special_swar(&bytes[offset..]).map(|index| offset + index)
+    }
+}
+
 #[cfg(any(target_arch = "x86", target_arch = "x86_64"))]
 #[target_feature(enable = "avx2")]
 unsafe fn find_string_special_avx2(bytes: &[u8]) -> Option<usize> {
@@ -207,17 +324,22 @@ unsafe fn find_string_special_avx2(bytes: &[u8]) -> Option<usize> {
             offset += 32;
         }
 
-        find_string_special_scalar(&bytes[offset..]).map(|index| offset + index)
+        find_string_special_sse2(&bytes[offset..]).map(|index| offset + index)
     }
 }
 
-#[cfg(target_arch = "aarch64")]
-#[target_feature(enable = "neon")]
-unsafe fn find_string_special_neon(bytes: &[u8]) -> Option<usize> {
+// AArch64/Apple Silicon and Apple arm64_32 targets compile this branch only
+// when the target ABI advertises NEON. Keeping it behind `target_feature`
+// avoids enabling NEON inside soft-float AArch64 ABIs, where doing so is unsound.
+#[cfg(all(
+    any(target_arch = "aarch64", target_arch = "arm64ec"),
+    target_feature = "neon"
+))]
+unsafe fn find_string_special_neon_aarch64(bytes: &[u8]) -> Option<usize> {
     use std::arch::aarch64::*;
 
-    // SAFETY: NEON is enabled for this function and each load/store has a full
-    // 16-byte backing region.
+    // SAFETY: this function is only compiled for targets with NEON enabled and
+    // every vector access has a full 16-byte backing region.
     unsafe {
         let quote = vdupq_n_u8(b'"');
         let slash = vdupq_n_u8(b'\\');
@@ -241,7 +363,47 @@ unsafe fn find_string_special_neon(bytes: &[u8]) -> Option<usize> {
             offset += 16;
         }
 
-        find_string_special_scalar(&bytes[offset..]).map(|index| offset + index)
+        find_string_special_swar(&bytes[offset..]).map(|index| offset + index)
+    }
+}
+
+// Rust stable still does not expose ARM32 NEON intrinsics. This optional branch
+// is therefore compiled only when the crate explicitly opts into nightly ARM
+// stdarch support AND the target itself is built with `+neon`.
+#[cfg(all(
+    target_arch = "arm",
+    target_feature = "neon",
+    feature = "nightly-arm-neon"
+))]
+unsafe fn find_string_special_neon_arm32(bytes: &[u8]) -> Option<usize> {
+    use std::arch::arm::*;
+
+    unsafe {
+        let quote = vdupq_n_u8(b'"');
+        let slash = vdupq_n_u8(b'\\');
+        let control_limit = vdupq_n_u8(0x20);
+        let mut offset = 0usize;
+
+        while offset + 16 <= bytes.len() {
+            let value = vld1q_u8(bytes.as_ptr().add(offset));
+            let mask = vorrq_u8(
+                vorrq_u8(vceqq_u8(value, quote), vceqq_u8(value, slash)),
+                vcltq_u8(value, control_limit),
+            );
+            let mut lanes = [0u8; 16];
+            vst1q_u8(lanes.as_mut_ptr(), mask);
+            let low = (lanes.as_ptr() as *const u64).read_unaligned();
+            let high = (lanes.as_ptr().add(8) as *const u64).read_unaligned();
+            if low | high != 0 {
+                return lanes
+                    .iter()
+                    .position(|&lane| lane != 0)
+                    .map(|index| offset + index);
+            }
+            offset += 16;
+        }
+
+        find_string_special_swar(&bytes[offset..]).map(|index| offset + index)
     }
 }
 
@@ -253,17 +415,38 @@ fn find_string_special(bytes: &[u8]) -> Option<usize> {
             // SAFETY: AVX2 support was checked immediately above.
             return unsafe { find_string_special_avx2(bytes) };
         }
-    }
-
-    #[cfg(target_arch = "aarch64")]
-    {
-        if bytes.len() >= 32 {
-            // SAFETY: NEON is part of the AArch64 baseline ISA.
-            return unsafe { find_string_special_neon(bytes) };
+        if bytes.len() >= 32 && std::arch::is_x86_feature_detected!("sse2") {
+            // SAFETY: SSE2 support was checked immediately above. It is part of
+            // the x86_64 baseline and dynamically detected on 32-bit x86.
+            return unsafe { find_string_special_sse2(bytes) };
         }
     }
 
-    find_string_special_scalar(bytes)
+    #[cfg(all(
+        any(target_arch = "aarch64", target_arch = "arm64ec"),
+        target_feature = "neon"
+    ))]
+    {
+        if bytes.len() >= 32 {
+            // SAFETY: this branch exists only in a NEON-enabled target build.
+            return unsafe { find_string_special_neon_aarch64(bytes) };
+        }
+    }
+
+    #[cfg(all(
+        target_arch = "arm",
+        target_feature = "neon",
+        feature = "nightly-arm-neon"
+    ))]
+    {
+        if bytes.len() >= 32 {
+            // SAFETY: the Cargo feature and target feature jointly guarantee
+            // nightly ARM stdarch support and a NEON-capable deployment target.
+            return unsafe { find_string_special_neon_arm32(bytes) };
+        }
+    }
+
+    find_string_special_swar(bytes)
 }
 
 #[inline(always)]
@@ -279,6 +462,67 @@ fn skip_json_whitespace_scalar(bytes: &[u8]) -> usize {
         .unwrap_or(bytes.len())
 }
 
+#[inline]
+fn skip_json_whitespace_swar(bytes: &[u8]) -> usize {
+    const WIDTH: usize = std::mem::size_of::<usize>();
+    let mut offset = 0usize;
+
+    while offset + WIDTH <= bytes.len() {
+        // SAFETY: a complete native word remains in the input slice.
+        let word = unsafe {
+            (bytes.as_ptr().add(offset) as *const usize).read_unaligned()
+        };
+        let whitespace_mask = swar_byte_eq_high_bits(word, b' ')
+            | swar_byte_eq_high_bits(word, b'\n')
+            | swar_byte_eq_high_bits(word, b'\r')
+            | swar_byte_eq_high_bits(word, b'\t');
+        if whitespace_mask != SWAR_HIGH_BITS {
+            let non_whitespace_mask = (!whitespace_mask) & SWAR_HIGH_BITS;
+            return offset + swar_first_marked_byte(non_whitespace_mask);
+        }
+        offset += WIDTH;
+    }
+
+    offset + skip_json_whitespace_scalar(&bytes[offset..])
+}
+
+#[cfg(any(target_arch = "x86", target_arch = "x86_64"))]
+#[target_feature(enable = "sse2")]
+unsafe fn skip_json_whitespace_sse2(bytes: &[u8]) -> usize {
+    #[cfg(target_arch = "x86")]
+    use std::arch::x86::*;
+    #[cfg(target_arch = "x86_64")]
+    use std::arch::x86_64::*;
+
+    unsafe {
+        let space = _mm_set1_epi8(b' ' as i8);
+        let newline = _mm_set1_epi8(b'\n' as i8);
+        let carriage = _mm_set1_epi8(b'\r' as i8);
+        let tab = _mm_set1_epi8(b'\t' as i8);
+        let mut offset = 0usize;
+
+        while offset + 16 <= bytes.len() {
+            let value = _mm_loadu_si128(bytes.as_ptr().add(offset) as *const __m128i);
+            let mask = _mm_movemask_epi8(_mm_or_si128(
+                _mm_or_si128(
+                    _mm_cmpeq_epi8(value, space),
+                    _mm_cmpeq_epi8(value, newline),
+                ),
+                _mm_or_si128(
+                    _mm_cmpeq_epi8(value, carriage),
+                    _mm_cmpeq_epi8(value, tab),
+                ),
+            )) as u32;
+            if mask != 0xffff {
+                return offset + ((!mask) & 0xffff).trailing_zeros() as usize;
+            }
+            offset += 16;
+        }
+
+        offset + skip_json_whitespace_swar(&bytes[offset..])
+    }
+}
+
 #[cfg(any(target_arch = "x86", target_arch = "x86_64"))]
 #[target_feature(enable = "avx2")]
 unsafe fn skip_json_whitespace_avx2(bytes: &[u8]) -> usize {
@@ -287,7 +531,6 @@ unsafe fn skip_json_whitespace_avx2(bytes: &[u8]) -> usize {
     #[cfg(target_arch = "x86_64")]
     use std::arch::x86_64::*;
 
-    // SAFETY: the caller guarantees AVX2 support and each load is within bounds.
     unsafe {
         let space = _mm256_set1_epi8(b' ' as i8);
         let newline = _mm256_set1_epi8(b'\n' as i8);
@@ -313,16 +556,17 @@ unsafe fn skip_json_whitespace_avx2(bytes: &[u8]) -> usize {
             offset += 32;
         }
 
-        offset + skip_json_whitespace_scalar(&bytes[offset..])
+        offset + skip_json_whitespace_sse2(&bytes[offset..])
     }
 }
 
-#[cfg(target_arch = "aarch64")]
-#[target_feature(enable = "neon")]
-unsafe fn skip_json_whitespace_neon(bytes: &[u8]) -> usize {
+#[cfg(all(
+    any(target_arch = "aarch64", target_arch = "arm64ec"),
+    target_feature = "neon"
+))]
+unsafe fn skip_json_whitespace_neon_aarch64(bytes: &[u8]) -> usize {
     use std::arch::aarch64::*;
 
-    // SAFETY: NEON is enabled for this function and each vector access is in bounds.
     unsafe {
         let space = vdupq_n_u8(b' ');
         let newline = vdupq_n_u8(b'\n');
@@ -344,7 +588,42 @@ unsafe fn skip_json_whitespace_neon(bytes: &[u8]) -> usize {
             offset += 16;
         }
 
-        offset + skip_json_whitespace_scalar(&bytes[offset..])
+        offset + skip_json_whitespace_swar(&bytes[offset..])
+    }
+}
+
+#[cfg(all(
+    target_arch = "arm",
+    target_feature = "neon",
+    feature = "nightly-arm-neon"
+))]
+unsafe fn skip_json_whitespace_neon_arm32(bytes: &[u8]) -> usize {
+    use std::arch::arm::*;
+
+    unsafe {
+        let space = vdupq_n_u8(b' ');
+        let newline = vdupq_n_u8(b'\n');
+        let carriage = vdupq_n_u8(b'\r');
+        let tab = vdupq_n_u8(b'\t');
+        let mut offset = 0usize;
+
+        while offset + 16 <= bytes.len() {
+            let value = vld1q_u8(bytes.as_ptr().add(offset));
+            let mask = vorrq_u8(
+                vorrq_u8(vceqq_u8(value, space), vceqq_u8(value, newline)),
+                vorrq_u8(vceqq_u8(value, carriage), vceqq_u8(value, tab)),
+            );
+            let mut lanes = [0u8; 16];
+            vst1q_u8(lanes.as_mut_ptr(), mask);
+            let low = (lanes.as_ptr() as *const u64).read_unaligned();
+            let high = (lanes.as_ptr().add(8) as *const u64).read_unaligned();
+            if low != u64::MAX || high != u64::MAX {
+                return offset + lanes.iter().position(|&lane| lane == 0).unwrap();
+            }
+            offset += 16;
+        }
+
+        offset + skip_json_whitespace_swar(&bytes[offset..])
     }
 }
 
@@ -356,17 +635,36 @@ fn skip_json_whitespace(bytes: &[u8]) -> usize {
             // SAFETY: AVX2 support was checked immediately above.
             return unsafe { skip_json_whitespace_avx2(bytes) };
         }
-    }
-
-    #[cfg(target_arch = "aarch64")]
-    {
-        if bytes.len() >= 32 {
-            // SAFETY: NEON is part of the AArch64 baseline ISA.
-            return unsafe { skip_json_whitespace_neon(bytes) };
+        if bytes.len() >= 32 && std::arch::is_x86_feature_detected!("sse2") {
+            // SAFETY: SSE2 support was checked immediately above.
+            return unsafe { skip_json_whitespace_sse2(bytes) };
         }
     }
 
-    skip_json_whitespace_scalar(bytes)
+    #[cfg(all(
+        any(target_arch = "aarch64", target_arch = "arm64ec"),
+        target_feature = "neon"
+    ))]
+    {
+        if bytes.len() >= 32 {
+            // SAFETY: this code is only present in a NEON-enabled build.
+            return unsafe { skip_json_whitespace_neon_aarch64(bytes) };
+        }
+    }
+
+    #[cfg(all(
+        target_arch = "arm",
+        target_feature = "neon",
+        feature = "nightly-arm-neon"
+    ))]
+    {
+        if bytes.len() >= 32 {
+            // SAFETY: enabled only for a nightly, NEON-targeted ARM32 build.
+            return unsafe { skip_json_whitespace_neon_arm32(bytes) };
+        }
+    }
+
+    skip_json_whitespace_swar(bytes)
 }
 
 #[inline]
@@ -412,7 +710,6 @@ fn reset_chars_to_suffix<'a>(i: &mut Chars<'a>, offset: usize) {
     let suffix: &'a str = unsafe { rest.get_unchecked(offset..) };
     *i = suffix.chars();
 }
-
 
 
 pub struct SerJsonState {
@@ -2340,9 +2637,63 @@ impl<'a> BorrowedJsonParser<'a> {
 
 #[cfg(test)]
 mod tests {
-    use super::{parse_json_zero_copy, parse_json_zero_copy_lenient, DeJson, JsonValueRef, SerJson};
+    use super::{
+        find_string_special, find_string_special_scalar, find_string_special_swar,
+        parse_json_zero_copy, parse_json_zero_copy_lenient, skip_json_whitespace,
+        skip_json_whitespace_scalar, skip_json_whitespace_swar, DeJson, JsonValueRef, SerJson,
+    };
     use std::borrow::Cow;
     use std::collections::HashMap;
+
+    #[test]
+    fn portable_scanners_match_scalar_reference() {
+        let mut seed = 0x9e37_79b9_7f4a_7c15u64;
+        for len in 0..=257usize {
+            let mut bytes = vec![0u8; len];
+            for byte in &mut bytes {
+                seed = seed
+                    .wrapping_mul(6_364_136_223_846_793_005)
+                    .wrapping_add(1_442_695_040_888_963_407);
+                *byte = (seed >> 32) as u8;
+            }
+
+            assert_eq!(
+                find_string_special_swar(&bytes),
+                find_string_special_scalar(&bytes),
+                "SWAR string scan mismatch at length {len}",
+            );
+            assert_eq!(
+                find_string_special(&bytes),
+                find_string_special_scalar(&bytes),
+                "dispatched string scan mismatch at length {len}",
+            );
+            assert_eq!(
+                skip_json_whitespace_swar(&bytes),
+                skip_json_whitespace_scalar(&bytes),
+                "SWAR whitespace scan mismatch at length {len}",
+            );
+            assert_eq!(
+                skip_json_whitespace(&bytes),
+                skip_json_whitespace_scalar(&bytes),
+                "dispatched whitespace scan mismatch at length {len}",
+            );
+        }
+    }
+
+    #[test]
+    fn scanners_find_every_lane_boundary() {
+        for len in 1..=96usize {
+            for index in 0..len {
+                let mut bytes = vec![b'a'; len];
+                bytes[index] = b'"';
+                assert_eq!(find_string_special(&bytes), Some(index));
+
+                let mut whitespace = vec![b' '; len];
+                whitespace[index] = b'x';
+                assert_eq!(skip_json_whitespace(&whitespace), index);
+            }
+        }
+    }
 
     #[test]
     fn serialize_empty_hashmap_json() {
