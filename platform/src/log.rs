@@ -108,7 +108,7 @@ pub(crate) fn log_with_level_makepad_platform(
         );
         #[cfg(target_os = "ios")]
         {
-            extern "C" {
+            unsafe extern "C" {
                 fn NSLog(fmt: crate::os::apple::apple_sys::ObjcId, ...);
             }
             use crate::os::apple::apple_util::str_to_nsstring;

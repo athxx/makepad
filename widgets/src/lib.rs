@@ -232,7 +232,6 @@ pub use crate::{
     window_menu::*,
 };
 
-#[cfg(feature = "cef")]
 pub use crate::browser::*;
 
 #[cfg(feature = "voice")]
@@ -343,7 +342,6 @@ pub fn widgets_mod(vm: &mut ScriptVm) {
     crate::label::script_mod(vm);
     crate::link_label::script_mod(vm);
     crate::button::script_mod(vm);
-    #[cfg(feature = "cef")]
     crate::browser::script_mod(vm);
     crate::check_box::script_mod(vm);
     crate::radio_button::script_mod(vm);

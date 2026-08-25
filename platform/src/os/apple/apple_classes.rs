@@ -63,6 +63,10 @@ pub struct AppleClasses {
     pub location_manager_delegate: *const Class,
     #[cfg(target_os = "macos")]
     pub sc_stream_output_delegate: *const Class,
+    #[cfg(any(target_os = "macos", target_os = "ios"))]
+    pub webview_script_message_handler: *const Class,
+    #[cfg(any(target_os = "macos", target_os = "ios"))]
+    pub webview_navigation_delegate: *const Class,
     pub const_attributes_for_marked_text: ObjcId,
     pub const_empty_string: RcObjcId,
 }
@@ -85,6 +89,12 @@ impl AppleClasses {
                 crate::os::apple::apple_geo::define_cl_location_manager_delegate(),
             #[cfg(target_os = "macos")]
             sc_stream_output_delegate: define_sc_stream_output_delegate(),
+            #[cfg(any(target_os = "macos", target_os = "ios"))]
+            webview_script_message_handler:
+                crate::os::apple::apple_webview::define_wk_script_message_handler(),
+            #[cfg(any(target_os = "macos", target_os = "ios"))]
+            webview_navigation_delegate:
+                crate::os::apple::apple_webview::define_wk_navigation_delegate(),
             const_attributes_for_marked_text: unsafe {
                 msg_send![
                     class!(NSArray),

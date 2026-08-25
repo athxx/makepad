@@ -39,6 +39,7 @@ workspace.members = [
     "libs/show_control",
     "libs/asset/creator",
     "libs/strict_json",
+    "libs/webview",
     # === remesh (FaithC port) / xatlas (jpcy port) ===
     "libs/remesh",
     "libs/xatlas",
@@ -69,6 +70,7 @@ workspace.members = [
     "examples/counter",
     "examples/web_font",
     "examples/browser",
+    "examples/webview",
     "examples/camera",
     "examples/windows_blur",
     "examples/floating_panel",

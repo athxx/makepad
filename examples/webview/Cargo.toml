@@ -1,0 +1,10 @@
+[package]
+name = "makepad-example-webview"
+version = "1.0.0"
+authors = ["Makepad <info@makepad.nl>"]
+edition = "2024"
+description = "Click a button to open a page inside an embedded WebView"
+license = "LGPL-3.0"
+
+[dependencies]
+makepad-widgets = { path = "../../widgets", version = "2.0.0" }
