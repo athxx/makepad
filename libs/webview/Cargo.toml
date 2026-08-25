@@ -1,0 +1,26 @@
+[package]
+name = "makepad-webview"
+version = "1.0.0"
+authors = ["Makepad <info@makepad.nl>"]
+edition = "2024"
+description = "Unified cross-platform WebView + bidirectional JS bridge for Makepad"
+license = "LGPL-3.0"
+homepage = "https://github.com/visokit/viso/"
+repository = "https://github.com/visokit/viso/"
+
+[dependencies]
+makepad-platform = { path = "../../platform", version = "2.0.0" }
+makepad-live-id = { path = "../live_id", version = "1.0.0" }
+makepad-micro-serde = { path = "../micro_serde", version = "1.0.0" }
+makepad-cef = { path = "../cef", version = "0.1.0", optional = true }
+
+# Android drives a native android.webkit.WebView through JNI, mirroring the
+# platform crate's own Android bindings. These deps must NOT use local `path`
+# entries — see the same note in platform/Cargo.toml.
+[target.'cfg(target_os = "android")'.dependencies]
+makepad-jni-sys = { version = "0.4.0" }
+makepad-android-state = { version = "0.1.0" }
+
+[features]
+default = []
+cef = ["dep:makepad-cef"]

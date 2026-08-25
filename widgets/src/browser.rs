@@ -6,6 +6,12 @@ script_mod! {
     mod.widgets.BrowserBackend = #(BrowserBackend::script_api(vm))
     mod.widgets.splat(mod.widgets.BrowserBackend)
 
+    mod.widgets.BrowserLoad = #(BrowserLoad::script_api(vm))
+    mod.widgets.splat(mod.widgets.BrowserLoad)
+
+    mod.widgets.BrowserDispose = #(BrowserDispose::script_api(vm))
+    mod.widgets.splat(mod.widgets.BrowserDispose)
+
     mod.widgets.BrowserBase = #(Browser::register_widget(vm))
 
     mod.widgets.Browser = set_type_default() do mod.widgets.BrowserBase{
@@ -19,6 +25,53 @@ pub enum BrowserBackend {
     #[pick]
     Native,
     CEF,
+}
+
+/// When the underlying web view is created and its first page load is issued.
+/// See also the sibling [`BrowserDispose`] policy. Reads `load_delay_ms` only
+/// when set to [`BrowserLoad::Deferred`].
+#[derive(Script, ScriptHook, Clone, Copy, Debug, PartialEq, Eq)]
+pub enum BrowserLoad {
+    /// Lazy (default): create + load only when the widget first becomes
+    /// visible. Fastest startup / lowest idle memory, slowest first open.
+    #[pick]
+    Lazy,
+    /// Create + load immediately on startup. Fastest first open, at the cost
+    /// of holding a web content process and issuing the request up front.
+    Eager,
+    /// Warm up `load_delay_ms` after startup: create + load in the background
+    /// while still hidden. Balances startup cost against first-open latency.
+    Deferred,
+}
+
+/// What happens to the web view once the widget becomes invisible again.
+/// Reads `dispose_delay_ms` only when set to [`BrowserDispose::Deferred`].
+#[derive(Script, ScriptHook, Clone, Copy, Debug, PartialEq, Eq)]
+pub enum BrowserDispose {
+    /// Keep the web view alive when hidden. Next show is instant; memory stays
+    /// resident until the app exits.
+    Keep,
+    /// Destroy the web view if it stays hidden for `dispose_delay_ms`. Balances
+    /// memory against re-open latency. Default.
+    #[pick]
+    Deferred,
+    /// Destroy the web view as soon as it becomes hidden. Frees memory eagerly;
+    /// the next show pays a full cold start.
+    Immediate,
+}
+
+/// Actions emitted by a [`Browser`] widget, mirroring
+/// [`makepad_webview::WebViewEvent`]: page load lifecycle plus inbound bridge
+/// messages from page JS (`window.vs.postMessage`).
+#[derive(Clone, Debug, Default)]
+pub enum BrowserAction {
+    #[default]
+    None,
+    LoadStarted { url: String },
+    LoadFinished { url: String },
+    LoadFailed { url: String, error: String },
+    /// A structured message from the page's JS bridge.
+    Message(makepad_webview::BridgeMessage),
 }
 
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
@@ -44,6 +97,20 @@ pub struct Browser {
     draw_bg: DrawImage,
     #[live(BrowserBackend::Native)]
     backend: BrowserBackend,
+    /// When the web view is created + first loaded. See [`BrowserLoad`].
+    #[live(BrowserLoad::Lazy)]
+    load: BrowserLoad,
+    /// Delay (ms) before background warm-up; used only when `load` is
+    /// [`BrowserLoad::Deferred`].
+    #[live]
+    load_delay_ms: u64,
+    /// What happens to the web view when hidden. See [`BrowserDispose`].
+    #[live]
+    dispose: BrowserDispose,
+    /// Delay (ms) a hidden web view is kept before destruction; used only when
+    /// `dispose` is [`BrowserDispose::Deferred`].
+    #[live(30000)]
+    dispose_delay_ms: u64,
     #[live]
     url: ArcStringMut,
     #[visible]
@@ -56,14 +123,23 @@ pub struct Browser {
     cef_browser: Option<makepad_cef::Browser>,
     #[rust]
     pump_timer: Timer,
+    /// Fires once after `load_delay_ms` for [`BrowserLoad::Deferred`] warm-up.
+    #[rust]
+    warmup_timer: Timer,
+    /// Fires once after `dispose_delay_ms` for [`BrowserDispose::Deferred`].
+    #[rust]
+    dispose_timer: Timer,
     #[rust]
     init_error: Option<String>,
     #[rust]
     last_url: String,
     #[rust]
     active_backend: ActiveBrowserBackend,
+    /// The unified cross-platform web view (Native backend). Created lazily on
+    /// first draw with the Native backend and torn down on backend transition.
+    /// The CEF path does not use this (it is migrated into the library in P4).
     #[rust]
-    system_browser_spawned: bool,
+    webview: Option<makepad_webview::WebView>,
     #[cfg(feature = "cef")]
     #[rust]
     pressed_buttons: MouseButton,
@@ -75,8 +151,10 @@ pub struct Browser {
 impl Browser {
     const PUMP_INTERVAL: f64 = 1.0 / 60.0;
 
-    fn system_browser_id(&self) -> SystemBrowserId {
-        SystemBrowserId(LiveId(self.uid.0))
+    /// A stable identity for the platform-side overlay (used by the library's
+    /// Apple backend to key its `SystemBrowserId`).
+    fn webview_id(&self) -> u64 {
+        self.uid.0
     }
 
     fn resolved_backend(&self) -> ActiveBrowserBackend {
@@ -120,9 +198,8 @@ impl Browser {
 
         match self.active_backend {
             ActiveBrowserBackend::Native => {
-                if self.system_browser_spawned {
-                    cx.system_browser(self.system_browser_id()).close();
-                    self.system_browser_spawned = false;
+                if let Some(mut webview) = self.webview.take() {
+                    webview.detach(cx);
                 }
             }
             ActiveBrowserBackend::CEF => {
@@ -141,32 +218,92 @@ impl Browser {
         }
     }
 
-    fn sync_system_browser(&mut self, cx: &mut Cx) {
-        let browser_id = self.system_browser_id();
-        if !self.system_browser_spawned {
-            cx.system_browser(browser_id).spawn(self.url.as_ref());
-            self.system_browser_spawned = true;
-            self.last_url.clear();
-            self.last_url.push_str(self.url.as_ref());
+    /// Create the Native web view (and issue its first `loadRequest`) if it
+    /// does not yet exist. Idempotent and safe to call from any load-policy
+    /// path (startup warm-up or first-visible draw). No-op unless the resolved
+    /// backend is Native.
+    fn ensure_created(&mut self, cx: &mut Cx) {
+        if self.webview.is_some() {
+            return;
         }
+        if self.resolved_backend() != ActiveBrowserBackend::Native {
+            return;
+        }
+        let url = self.url.as_ref().to_string();
+        let opts = makepad_webview::WebViewOptions {
+            url: url.clone(),
+            backend: makepad_webview::Backend::Native,
+            visible: self.visible,
+            id: self.webview_id(),
+        };
+        match makepad_webview::WebView::new(cx, opts) {
+            Ok(webview) => {
+                self.webview = Some(webview);
+                self.last_url.clear();
+                self.last_url.push_str(&url);
+            }
+            Err(err) => {
+                let message = err.to_string();
+                log!("Browser widget initialization failed: {message}");
+                self.init_error = Some(message);
+            }
+        }
+    }
 
-        let url = self.url.as_ref();
-        if self.last_url != url {
-            cx.system_browser(browser_id).set_url(url, false);
-            self.last_url.clear();
-            self.last_url.push_str(url);
+    fn sync_webview(&mut self, cx: &mut Cx) {
+        self.ensure_created(cx);
+        if self.init_error.is_some() && self.webview.is_none() {
+            return;
         }
+        let url = self.url.as_ref().to_string();
 
         let area = self.browser_area();
-        if self.visible && area.is_valid(cx) {
-            cx.system_browser(browser_id).update(area, true);
-        } else if self.system_browser_spawned {
-            cx.system_browser(browser_id).detach();
+        let visible = self.visible && area.is_valid(cx);
+
+        let Some(webview) = &mut self.webview else {
+            return;
+        };
+
+        if self.last_url != url {
+            webview.set_url(cx, &url);
+            self.last_url.clear();
+            self.last_url.push_str(&url);
         }
+
+        webview.update_rect(cx, area, visible);
     }
 
     fn browser_area(&self) -> Area {
         self.draw_bg.area()
+    }
+
+    /// Drain queued events from the Native web view and re-emit them as
+    /// [`BrowserAction`]s. Load events / inbound bridge messages arrive here
+    /// once the platform backchannel is wired (P2); until then this is a no-op.
+    fn poll_webview_events(&mut self, cx: &mut Cx) {
+        let Some(webview) = &mut self.webview else {
+            return;
+        };
+        let events = webview.poll_events();
+        if events.is_empty() {
+            return;
+        }
+        let uid = self.uid;
+        for event in events {
+            let action = match event {
+                makepad_webview::WebViewEvent::LoadStarted { url } => {
+                    BrowserAction::LoadStarted { url }
+                }
+                makepad_webview::WebViewEvent::LoadFinished { url } => {
+                    BrowserAction::LoadFinished { url }
+                }
+                makepad_webview::WebViewEvent::LoadFailed { url, error } => {
+                    BrowserAction::LoadFailed { url, error }
+                }
+                makepad_webview::WebViewEvent::Message(msg) => BrowserAction::Message(msg),
+            };
+            cx.widget_action(uid, action);
+        }
     }
 
     #[cfg(feature = "cef")]
@@ -643,11 +780,12 @@ impl Browser {
         self.url.set(url);
         self.last_url.clear();
         match self.active_backend {
-            ActiveBrowserBackend::Native if self.system_browser_spawned => {
-                cx.system_browser(self.system_browser_id())
-                    .set_url(url, false);
+            ActiveBrowserBackend::Native => {
+                if let Some(webview) = &mut self.webview {
+                    webview.set_url(cx, url);
+                    self.last_url.push_str(url);
+                }
             }
-            ActiveBrowserBackend::Native => {}
             ActiveBrowserBackend::CEF =>
             {
                 #[cfg(feature = "cef")]
@@ -670,32 +808,100 @@ impl Browser {
             return;
         }
         self.visible = visible;
-        if !visible && self.system_browser_spawned {
-            cx.system_browser(self.system_browser_id()).detach();
+        if visible {
+            self.on_shown(cx);
+        } else {
+            self.on_hidden(cx);
         }
         self.redraw(cx);
+    }
+
+    /// Called when the widget transitions to visible: cancel any pending
+    /// deferred destruction so a quick hide/show round-trip stays instant.
+    fn on_shown(&mut self, cx: &mut Cx) {
+        cx.stop_timer(self.dispose_timer);
+        self.dispose_timer = Timer::default();
+    }
+
+    /// Called when the widget transitions to hidden: hide the web view and
+    /// apply the configured [`BrowserDispose`] policy.
+    fn on_hidden(&mut self, cx: &mut Cx) {
+        if self.active_backend != ActiveBrowserBackend::Native {
+            return;
+        }
+        let area = self.draw_bg.area();
+        if let Some(webview) = &mut self.webview {
+            webview.update_rect(cx, area, false);
+        }
+        match self.dispose {
+            BrowserDispose::Keep => {}
+            BrowserDispose::Immediate => {
+                self.destroy_webview(cx);
+            }
+            BrowserDispose::Deferred => {
+                if self.webview.is_some() {
+                    cx.stop_timer(self.dispose_timer);
+                    self.dispose_timer =
+                        cx.start_timeout(self.dispose_delay_ms as f64 / 1000.0);
+                }
+            }
+        }
+    }
+
+    /// Tear down the Native web view and reset load state so a later show
+    /// re-creates and reloads it from scratch.
+    fn destroy_webview(&mut self, cx: &mut Cx) {
+        cx.stop_timer(self.dispose_timer);
+        self.dispose_timer = Timer::default();
+        if let Some(mut webview) = self.webview.take() {
+            webview.detach(cx);
+        }
+        self.last_url.clear();
     }
 }
 
 impl Widget for Browser {
     fn handle_event(&mut self, cx: &mut Cx, event: &Event, _scope: &mut Scope) {
-        if let Event::Startup = event {
-            self.pump_timer = cx.start_interval(Self::PUMP_INTERVAL);
-        }
-
         let desired_backend = self.resolved_backend();
         self.sync_backend_transition(cx, desired_backend);
 
+        if let Event::Startup = event {
+            self.pump_timer = cx.start_interval(Self::PUMP_INTERVAL);
+            if desired_backend == ActiveBrowserBackend::Native {
+                match self.load {
+                    BrowserLoad::Lazy => {}
+                    BrowserLoad::Eager => self.ensure_created(cx),
+                    BrowserLoad::Deferred => {
+                        self.warmup_timer =
+                            cx.start_timeout(self.load_delay_ms as f64 / 1000.0);
+                    }
+                }
+            }
+        }
+
         if matches!(event, Event::Shutdown) {
-            if self.system_browser_spawned {
-                cx.system_browser(self.system_browser_id()).close();
-                self.system_browser_spawned = false;
+            cx.stop_timer(self.warmup_timer);
+            cx.stop_timer(self.dispose_timer);
+            if let Some(mut webview) = self.webview.take() {
+                webview.detach(cx);
             }
             #[cfg(feature = "cef")]
             {
                 self.cef_browser = None;
             }
             return;
+        }
+
+        if self.warmup_timer.is_event(event).is_some() {
+            self.warmup_timer = Timer::default();
+            self.ensure_created(cx);
+        }
+
+        if self.dispose_timer.is_event(event).is_some() {
+            self.dispose_timer = Timer::default();
+            if !self.visible {
+                self.destroy_webview(cx);
+            }
         }
 
         if desired_backend == ActiveBrowserBackend::Unsupported {
@@ -708,6 +914,9 @@ impl Widget for Browser {
         }
 
         if self.pump_timer.is_event(event).is_some() {
+            if desired_backend == ActiveBrowserBackend::Native {
+                self.poll_webview_events(cx);
+            }
             #[cfg(feature = "cef")]
             if desired_backend == ActiveBrowserBackend::CEF {
                 self.pump_browser(cx);
@@ -715,8 +924,11 @@ impl Widget for Browser {
         }
 
         if !self.visible {
-            if desired_backend == ActiveBrowserBackend::Native && self.system_browser_spawned {
-                cx.system_browser(self.system_browser_id()).detach();
+            if desired_backend == ActiveBrowserBackend::Native {
+                if let Some(webview) = &mut self.webview {
+                    let area = self.draw_bg.area();
+                    webview.update_rect(cx, area, false);
+                }
             }
             return;
         }
@@ -916,8 +1128,11 @@ impl Widget for Browser {
         self.sync_backend_transition(cx, desired_backend);
 
         if !self.visible {
-            if desired_backend == ActiveBrowserBackend::Native && self.system_browser_spawned {
-                cx.system_browser(self.system_browser_id()).detach();
+            if desired_backend == ActiveBrowserBackend::Native {
+                if let Some(webview) = &mut self.webview {
+                    let area = self.draw_bg.area();
+                    webview.update_rect(cx, area, false);
+                }
             }
             return DrawStep::done();
         }
@@ -937,7 +1152,7 @@ impl Widget for Browser {
             ActiveBrowserBackend::Native => {
                 self.draw_bg.draw_vars.empty_texture(0);
                 self.draw_bg.draw_walk(cx, walk);
-                self.sync_system_browser(cx);
+                self.sync_webview(cx);
                 DrawStep::done()
             }
             ActiveBrowserBackend::CEF => {
@@ -980,6 +1195,36 @@ impl BrowserRef {
     pub fn set_visible(&self, cx: &mut Cx, visible: bool) {
         if let Some(mut inner) = self.borrow_mut() {
             inner.set_visible_internal(cx, visible);
+        }
+    }
+
+    /// Rust → JS: deliver a structured bridge message to page listeners
+    /// registered via `window.vs.onMessage(...)`. No-op unless the Native
+    /// backend web view exists.
+    pub fn post_to_js(&self, cx: &mut Cx, msg: &makepad_webview::BridgeMessage) {
+        if let Some(mut inner) = self.borrow_mut() {
+            if let Some(webview) = &mut inner.webview {
+                webview.post_to_js(cx, msg);
+            }
+        }
+    }
+
+    /// Rust → JS: evaluate an arbitrary script in the page context. No-op
+    /// unless the Native backend web view exists.
+    pub fn eval_js(&self, cx: &mut Cx, script: &str) {
+        if let Some(mut inner) = self.borrow_mut() {
+            if let Some(webview) = &mut inner.webview {
+                webview.eval_js(cx, script);
+            }
+        }
+    }
+
+    /// Read the [`BrowserAction`] emitted by this widget this frame, if any.
+    pub fn action(&self, actions: &Actions) -> BrowserAction {
+        if let Some(item) = actions.find_widget_action(self.widget_uid()) {
+            item.cast()
+        } else {
+            BrowserAction::None
         }
     }
 }

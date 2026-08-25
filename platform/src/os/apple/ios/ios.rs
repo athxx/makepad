@@ -1249,7 +1249,7 @@ impl Cx {
                     self.os
                         .system_browsers
                         .entry(browser_id)
-                        .or_insert_with(|| IosSystemBrowser::new(&url))
+                        .or_insert_with(|| IosSystemBrowser::new(browser_id.0, &url))
                         .set_url(&url, false);
                 }
                 CxOsOp::UpdateSystemBrowser {
@@ -1288,6 +1288,11 @@ impl Cx {
                 CxOsOp::SystemBrowserHistoryGo { browser_id, delta } => {
                     if let Some(browser) = self.os.system_browsers.get_mut(&browser_id) {
                         browser.history_go(delta);
+                    }
+                }
+                CxOsOp::EvalSystemBrowserJs { browser_id, script } => {
+                    if let Some(browser) = self.os.system_browsers.get_mut(&browser_id) {
+                        browser.eval_js(&script);
                     }
                 }
                 CxOsOp::CloseSystemBrowser { browser_id } => {

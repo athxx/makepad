@@ -227,6 +227,13 @@ impl<'a> CxSystemBrowser<'a> {
         });
     }
 
+    pub fn eval_js(&mut self, script: &str) {
+        self.cx.platform_ops.push_back(CxOsOp::EvalSystemBrowserJs {
+            browser_id: self.id.0,
+            script: script.to_string(),
+        });
+    }
+
     pub fn close(&mut self) {
         self.cx.platform_ops.push_back(CxOsOp::CloseSystemBrowser {
             browser_id: self.id.0,
@@ -485,6 +492,10 @@ pub enum CxOsOp {
         browser_id: LiveId,
         delta: i32,
     },
+    EvalSystemBrowserJs {
+        browser_id: LiveId,
+        script: String,
+    },
     CloseSystemBrowser {
         browser_id: LiveId,
     },
@@ -588,6 +599,7 @@ impl std::fmt::Debug for CxOsOp {
             Self::DetachSystemBrowser { .. } => write!(f, "DetachSystemBrowser"),
             Self::SetSystemBrowserUrl { .. } => write!(f, "SetSystemBrowserUrl"),
             Self::SystemBrowserHistoryGo { .. } => write!(f, "SystemBrowserHistoryGo"),
+            Self::EvalSystemBrowserJs { .. } => write!(f, "EvalSystemBrowserJs"),
             Self::CloseSystemBrowser { .. } => write!(f, "CloseSystemBrowser"),
             Self::PrepareAudioPlayback(..) => write!(f, "PrepareAudioPlayback"),
             Self::BeginVideoPlayback(..) => write!(f, "BeginVideoPlayback"),

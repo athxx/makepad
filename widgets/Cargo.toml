@@ -18,6 +18,7 @@ i_overlay = { path = "../vendor/i_overlay", version = "7.0.3", optional = true, 
 makepad-fast-inflate = { path = "../libs/fast_inflate", optional = true }
 makepad-voice = { path = "../libs/voice", version = "0.1.0", optional = true }
 makepad-cef = { path = "../libs/cef", optional = true }
+makepad-webview = { path = "../libs/webview", version = "1.0.0" }
 
 makepad-html = { path = "../libs/html", version = "1.0.0" }
 unicode-segmentation = { version = "1.12.0", path = "../vendor/unicode/unicode-segmentation" }
@@ -34,7 +35,7 @@ default = []
 voice = ["dep:makepad-voice"]
 maps = ["dep:makepad-mbtile-reader", "dep:makepad-fast-inflate", "dep:i_overlay"]
 pdf = ["dep:makepad-pdf-parse"]
-cef = ["dep:makepad-cef"]
+cef = ["dep:makepad-cef", "makepad-webview/cef"]
 
 ## Enables certain public-facing types to derive serde serialization traits.
 serde = ["dep:serde", "makepad-draw/serde", "makepad-derive-widget/serde"]
