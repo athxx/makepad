@@ -770,7 +770,17 @@ impl MacosWindow {
         }
     }
 
-    pub(crate) fn retire(&mut self) {
+    /// Send the window's destruction objc messages (unbind delegate, stop
+    /// mouse-moved delivery, invalidate the live-resize timer). This MUST run
+    /// inside the AppKit `windowWillClose:` callback — the only context that
+    /// owns the AppKit lock guarding these mutations. Doing it later, from the
+    /// deferred `NSOperationQueue` block that finishes the close, unlocks an
+    /// `os_unfair_lock` on the wrong context and aborts the process. Idempotent
+    /// via the `retired` flag so the deferred `retire()` can call it harmlessly.
+    pub(crate) fn retire_native(&mut self) {
+        if self.retired {
+            return;
+        }
         self.retired = true;
         unsafe {
             if self.live_resize_timer != nil {
@@ -780,6 +790,14 @@ impl MacosWindow {
             let () = msg_send![self.window, setAcceptsMouseMovedEvents: NO];
             let () = msg_send![self.window, setDelegate: nil];
         }
+    }
+
+    /// Marks the window retired. The objc teardown is done separately in
+    /// [`retire_native`], synchronously from `windowWillClose:`; by the time
+    /// this runs (the deferred close block) the flag is already set, so this is
+    /// a no-op guard that keeps the deferred bookkeeping path total.
+    pub(crate) fn retire(&mut self) {
+        self.retire_native();
     }
 
     pub fn set_position(&mut self, pos: Vec2d) {
@@ -1090,6 +1108,17 @@ impl MacosWindow {
             return;
         }
         self.close_event_deferred = true;
+        // Do ALL objc teardown NOW, while we are still inside AppKit's
+        // `windowWillClose:` callback and it owns the lock guarding these
+        // mutations: unbind the delegate / stop the resize timer
+        // (`retire_native`), AND invalidate this window's `CADisplayLink` and
+        // re-arm the paint heartbeat (`retire_cocoa_window_native`). Only
+        // dropping the boxed window is deferred below. Any objc message sent
+        // from the deferred `NSOperationQueue` block instead aborts with an
+        // unowned os_unfair_lock — that is the whole bug this split fixes.
+        self.retire_native();
+        let native_window = self.window;
+        with_macos_app(|app| app.retire_cocoa_window_native(native_window));
         MacosApp::defer_window_closed(self.window_id);
     }
 

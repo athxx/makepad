@@ -317,6 +317,18 @@ pub struct MacosApp {
     /// NSTimer pacing stays). Entries are (cocoa window, link).
     display_links: Vec<(ObjcId, ObjcId)>,
     display_links_paused: bool,
+    /// Links whose window has closed. `[CADisplayLink invalidate]` unlocks an
+    /// `os_unfair_lock` owned by the link's own display-server callback thread,
+    /// not the current thread, so calling it during window close aborts the
+    /// process ("unlock of an os_unfair_lock not owned by current thread") in
+    /// EVERY main-thread context tried (deferred GCD block AND the
+    /// `windowWillClose:` notification-observer callout). So we never invalidate:
+    /// we `setPaused: YES` (the safe op used every idle cycle) and keep the link
+    /// alive here to process teardown — mirroring the view/delegate lifetime in
+    /// `retired_cocoa_windows`. The main run loop retains it regardless; parking
+    /// its pointer here just keeps `ensure_display_link` from resurrecting a
+    /// link on a dead window.
+    retired_display_links: Vec<ObjcId>,
     //pub signals: Mutex<RefCell<HashSet<Signal>>>,
     pub cocoa_windows: Vec<(ObjcId, ObjcId)>,
     /// Exact framework-to-Cocoa lookup for bridge-injected pointer activation.
@@ -389,6 +401,7 @@ impl MacosApp {
                 timer_delegate_instance: msg_send![get_macos_class_global().timer_delegate, new],
                 display_links: Vec::new(),
                 display_links_paused: false,
+                retired_display_links: Vec::new(),
                 menu_delegate_instance: msg_send![get_macos_class_global().menu_delegate, new],
                 //app_delegate_instance,
                 //signals: Mutex::new(RefCell::new(HashSet::new())),
@@ -1019,23 +1032,32 @@ impl MacosApp {
     /// its still-retained Cocoa view and delegate. Those native objects retain
     /// their original `alloc` ownership until process teardown; keeping this
     /// small Rust peer for the same lifetime closes the corresponding UAF.
-    pub fn retire_cocoa_window(&mut self, mut window: Box<MacosWindow>) {
-        window.retire();
-        let native_window = window.window;
-        self.cocoa_window_ids
-            .retain(|(window_id, _)| *window_id != window.window_id);
-        self.cocoa_windows
-            .retain(|(window, _view)| *window != native_window);
-        self.retired_cocoa_windows.push(window);
-        // Drop the closing window's link; if the PRIMARY died, beats died
-        // with it — keep a heartbeat alive so the paint loop wakes and
+    /// Retire the closing window's `CADisplayLink`: pause it and park it alive
+    /// to process teardown, then re-arm the paint heartbeat if that was the last
+    /// live link. We deliberately do NOT call `[CADisplayLink invalidate]` —
+    /// invalidate unlocks an `os_unfair_lock` owned by the link's own
+    /// display-server callback thread, not the current one, so it aborts the
+    /// process ("unlock of an os_unfair_lock not owned by current thread") from
+    /// every main-thread context we tried (the deferred `NSOperationQueue` GCD
+    /// block AND the `windowWillClose:` notification-observer callout).
+    /// `setPaused: YES` only toggles a flag — it is the same op run every idle
+    /// cycle (`pause_display_link`) and is safe here. The parked link matches
+    /// the view/delegate lifetime in `retired_cocoa_windows`: the main run loop
+    /// retains it anyway, and keeping the pointer stops `ensure_display_link`
+    /// from resurrecting a link on the dead window. Idempotent. Callable from
+    /// either context (`windowWillClose:` or the deferred block) now.
+    pub fn retire_cocoa_window_native(&mut self, native_window: ObjcId) {
+        // Pause + park the closing window's link; if the PRIMARY died, beats
+        // died with it — keep a heartbeat alive so the paint loop wakes and
         // re-anchors (ensure_timer0_started spots the missing link).
         let had = !self.display_links.is_empty();
+        let retired = &mut self.retired_display_links;
         self.display_links.retain(|(window, link)| {
             if *window == native_window {
                 unsafe {
-                    let () = msg_send![*link, invalidate];
+                    let () = msg_send![*link, setPaused: YES];
                 }
+                retired.push(*link);
                 false
             } else {
                 true
@@ -1045,6 +1067,25 @@ impl MacosApp {
             self.stop_timer(0);
             self.start_timer(0, 0.2, true);
         }
+    }
+
+    pub fn retire_cocoa_window(&mut self, mut window: Box<MacosWindow>) {
+        // The window's objc teardown already ran synchronously in
+        // `windowWillClose:`: the delegate unbind via `retire_native` AND the
+        // display-link invalidate / paint-timer re-arm via
+        // `retire_cocoa_window_native`. This deferred path (the
+        // `NSOperationQueue` block) runs on the GCD main-queue drain, a context
+        // that does not own AppKit's run-loop lock, so it must send NO objc
+        // messages — only Rust-side `Vec` bookkeeping. Do NOT reintroduce
+        // `[window setDelegate:nil]` or `[link invalidate]` here; either aborts
+        // with "unlock of an os_unfair_lock not owned by current thread".
+        window.retire();
+        let native_window = window.window;
+        self.cocoa_window_ids
+            .retain(|(window_id, _)| *window_id != window.window_id);
+        self.cocoa_windows
+            .retain(|(window, _view)| *window != native_window);
+        self.retired_cocoa_windows.push(window);
     }
 
     /// True when link pacing SHOULD be re-armed: a window exists without
@@ -1328,13 +1369,17 @@ impl MacosApp {
     /// so the caller falls back to NSTimer pacing.
     pub fn ensure_display_link(&mut self) -> bool {
         unsafe {
-            // Prune links whose window is gone.
+            // Prune links whose window is gone. Never `invalidate` (aborts on
+            // the display-server lock — see `retire_cocoa_window_native`); pause
+            // and park alive to teardown, same as the close path.
             let windows: Vec<ObjcId> = self.cocoa_windows.iter().map(|(w, _)| *w).collect();
+            let retired = &mut self.retired_display_links;
             self.display_links.retain(|(window, link)| {
                 if windows.contains(window) {
                     true
                 } else {
-                    let () = msg_send![*link, invalidate];
+                    let () = msg_send![*link, setPaused: YES];
+                    retired.push(*link);
                     false
                 }
             });
