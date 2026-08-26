@@ -1,0 +1,14 @@
+[package]
+name = "viso-ende"
+version = "1.0.0"
+authors = ["Athan <info@makepad.nl>"]
+edition = "2024"
+description = "ende encode/decode replacement for ende"
+license = "LGPL-3.0"
+homepage = "https://github.com/visokit/viso/"
+repository = "https://github.com/visokit/viso/"
+metadata.makepad-auto-version = "yK9xdn_D0D3EdqleI-WHLtjk4rk="
+
+[dependencies]
+viso-ende-derive = { path = "derive", version = "1.0.0" }
+viso-id = {path = "../vid", version = "1.0.0" }
