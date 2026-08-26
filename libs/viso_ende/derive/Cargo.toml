@@ -1,0 +1,17 @@
+[package]
+name = "viso-ende-derive"
+version = "1.0.0"
+authors = ["Athan <athanseal@gmail.com>"]
+edition = "2024"
+description = "Viso encode/decode derive macro"
+license = "LGPL-3.0"
+homepage = "https://github.com/visokit/viso/"
+repository = "https://github.com/visokit/viso/"
+metadata.makepad-auto-version = "tSPvEgfuhrUzpofjMUEzGZksHSo="
+
+[lib]
+proc-macro = true
+
+[dependencies]
+viso-proc-macro = { path = "../../viso_proc_macro", version = "1.0.0" }
+

@@ -1,0 +1,9 @@
+[package]
+name = "viso_ende_example"
+version = "0.1.0"
+edition = "2024"
+
+[workspace]
+
+[dependencies]
+viso-ende = { path = "../../viso_ende" }

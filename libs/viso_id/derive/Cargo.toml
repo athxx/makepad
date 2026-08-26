@@ -1,0 +1,16 @@
+[package]
+name = "viso-id-derive"
+version = "1.0.0"
+authors = ["Viso <support@viso.im>"]
+edition = "2024"
+description = "Viso id derive"
+license = "LGPL-3.0"
+metadata.makepad-auto-version = "lDtmHNCpwGDsVSuDhZxGSPFB0_0="
+
+[lib]
+proc-macro = true
+
+[dependencies]
+viso-proc-macro = { path = "../../viso_proc_macro", version = "1.0.0" }
+
+
