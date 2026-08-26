@@ -44,7 +44,7 @@ pub type AAudioStream_errorCallback = ::std::option::Option<
 >;
 
 #[link(name = "aaudio")]
-extern "C" {
+unsafe extern "C" {
     pub fn AAudio_createStreamBuilder(builder: *mut *mut AAudioStreamBuilder) -> aaudio_result_t;
     pub fn AAudioStreamBuilder_setDeviceId(builder: *mut AAudioStreamBuilder, deviceId: i32);
     pub fn AAudioStreamBuilder_setDirection(

@@ -1,7 +1,7 @@
 use std::panic;
 pub use crate::LogType;
 
-extern "C" {
+unsafe extern "C" {
     pub fn js_console_log(chars: u32, len: u32);
     pub fn js_console_error(chars: u32, len: u32);
 }

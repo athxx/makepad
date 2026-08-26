@@ -14,7 +14,7 @@ pub struct OH_NativeVSync {
 #[link(name = "hilog_ndk.z")]
 #[link(name = "native_window")]
 #[link(name = "native_vsync")]
-extern "C" {
+unsafe extern "C" {
     pub fn OH_NativeVSync_Create(name: *const c_char, length: c_uint) -> *mut OH_NativeVSync;
     pub fn OH_NativeVSync_Destroy(nativeVsync: *mut OH_NativeVSync) -> c_void;
     pub fn OH_NativeVSync_RequestFrame(
@@ -52,7 +52,7 @@ pub struct uv__work {
 }
 
 #[link(name = "uv")]
-extern "C" {
+unsafe extern "C" {
     pub fn uv_queue_work(
         loop_: *mut uv_loop_t,
         req: *mut uv_work_t,
@@ -73,7 +73,7 @@ pub struct NativeResourceManager {
 }
 
 #[link(name = "rawfile.z")]
-extern "C" {
+unsafe extern "C" {
     pub fn OH_ResourceManager_InitNativeResourceManager(
         env: napi_env,
         jsResMgr: napi_value,

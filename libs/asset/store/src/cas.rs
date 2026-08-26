@@ -88,7 +88,7 @@ fn fsync_dir(dir: &Path) -> ServerResult<()> {
 #[cfg(unix)]
 fn fsync_plain(file: &File, op: &'static str) -> ServerResult<()> {
     use std::os::unix::io::AsRawFd;
-    extern "C" {
+    unsafe extern "C" {
         fn fsync(fd: i32) -> i32;
     }
     // Safety: the fd is owned by `file` for the duration of the call.

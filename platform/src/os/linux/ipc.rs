@@ -204,7 +204,7 @@ mod sys {
     }
     const _: () = assert!(std::mem::size_of::<cmsghdr>() % std::mem::size_of::<usize>() == 0);
 
-    extern "C" {
+    unsafe extern "C" {
         fn sendmsg(
             sockfd: BorrowedFd<'_>,
             msg: *const msghdr<io::IoSlice<'_>>,
@@ -363,7 +363,7 @@ impl<TX, RX> Channel<TX, RX> {
     /// due to the latter's misdesign as read/write instead of `fetch_{and,or}`,
     /// so they invite race conditions and should be deprecated and never used).
     pub fn into_child_process_inheritable(self) -> io::Result<InheritableChannel<TX, RX>> {
-        extern "C" {
+        unsafe extern "C" {
             fn dup(fd: BorrowedFd<'_>) -> Option<OwnedFd>;
         }
         Ok(InheritableChannel(Self {

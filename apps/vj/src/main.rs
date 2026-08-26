@@ -66,7 +66,7 @@ mod fx_slot;
 mod fx_thumbs;
 mod import_ui;
 mod pipelines;
-mod gen;
+mod generate;
 mod lanes;
 // LIVECODING: the observed effect-document origins, and the compile answer
 // a coding agent polls after saving one. See apps/vj/LIVECODING.md.
@@ -148,7 +148,7 @@ use crate::fx_slot::{
 use crate::midi_learn::{LearnEvent, LearnWrapAction, MidiLearn, VjLearnWrap};
 use makepad_asset_widgets::{VideoAction, VideoView};
 use crate::pipelines::{PipeDone, PipeReq, Pipelines};
-use crate::gen::{GenCmd, GenModel, ProfilesState};
+use crate::generate::{GenCmd, GenModel, GenTag, ProfilesState};
 use crate::lanes::{LatestWins, AUDIO_LANE};
 use crate::media::{DecodeDone, DecodeJob, DecodePool, SlotPlayer};
 use crate::mixer::{
@@ -5544,7 +5544,7 @@ pub struct App {
     #[rust(PadEngine::new())]
     pads: PadEngine,
     #[rust(GenModel::new())]
-    gen: GenModel,
+    generate: GenModel,
     #[rust]
     gen_panel_loaded: bool,
 
@@ -11440,20 +11440,18 @@ p2 {}
                         });
                     }
                     GenCmd::Enqueue { tag, namespace, kind, body } => {
-                        if !self.pipelines.connected() {
-                            self.pipelines.connect(up.endpoints, up.token.clone());
-                        }
-                        if !self.pipelines.submit(PipeReq::EnqueueJob {
-                            tag,
-                            namespace,
-                            kind,
-                            body,
-                        }) {
-                            self.gen.enqueue_failed_at(
-                                tag,
-                                "run transport unavailable — press Queue again".to_string(),
-                                Some(now),
-                            );
+                        match up.catalog.submit(ClientRequest::EnqueueJob { namespace, kind, body }) {
+                            Ok(id) => {
+                                self.cat_reqs.insert(id, CatPurpose::JobEnqueue { tag });
+                            }
+                            Err(_) => {
+                                runtime_down = true;
+                                self.generate.enqueue_failed_at(
+                                    tag,
+                                    "connection lost — reconnecting, press Queue again".to_string(),
+                                    Some(now),
+                                );
+                            }
                         }
                     }
                     GenCmd::PollStatus { job } => {
@@ -11507,7 +11505,7 @@ p2 {}
             }
         }
         for tag in declare_failed {
-            self.gen.pipeline_failed_at(
+            self.generate.pipeline_failed_at(
                 tag,
                 "connection lost — reconnecting, press Queue again".to_string(),
                 Some(now),
@@ -11572,7 +11570,7 @@ p2 {}
                             created.pipeline,
                             stages.join(" ")
                         );
-                        let cmds = self.gen.pipeline_created_at(
+                        let cmds = self.generate.pipeline_created_at(
                             tag,
                             created.pipeline,
                             Some(now_ms()),
@@ -11588,13 +11586,13 @@ p2 {}
                         // by hand — that is the invisible run this lane
                         // deleted.
                         log!("dream {tag}: declaration refused: {error}");
-                        self.gen.pipeline_failed_at(tag, error, Some(now_ms()));
+                        self.generate.pipeline_failed_at(tag, error, Some(now_ms()));
                         self.grids_dirty = true;
                     }
                 },
                 PipeDone::Detail { pipeline, result } => match result {
                     Ok(detail) => {
-                        let finish = self.gen.pipeline_arrived_at(&detail, now_ms());
+                        let finish = self.generate.pipeline_arrived_at(&detail, now_ms());
                         if let Some(finish) = finish {
                             // The run FINISHED. This is the completion
                             // signal the grid refresh hangs off now — the
@@ -11621,36 +11619,36 @@ p2 {}
                         }
                     }
                     Err(error) => {
-                        self.gen.pipeline_failed_read(pipeline, error, now_ms());
+                        self.generate.pipeline_failed_read(pipeline, error, now_ms());
                     }
                 },
                 PipeDone::JobQueued { tag, result } => match result {
                     Ok(job) => {
-                        let cmds = self.gen.queued_at(tag, job, Some(now_ms()));
+                        let cmds = self.generate.queued_at(tag, job, Some(now_ms()));
                         self.run_gen_cmds(cmds);
                     }
                     Err(error) => {
-                        self.gen.enqueue_failed_at(tag, error, Some(now_ms()));
+                        self.generate.enqueue_failed_at(tag, error, Some(now_ms()));
                     }
                 },
                 PipeDone::JobStatus { job, result } => match result {
-                    Ok(status) => self.gen.status_arrived_at(&status, now_ms()),
+                    Ok(status) => self.generate.status_arrived_at(&status, now_ms()),
                     Err(error) => {
-                        self.gen.status_failed_at(job, error, Some(now_ms()));
+                        self.generate.status_failed_at(job, error, Some(now_ms()));
                     }
                 },
                 PipeDone::JobCancelled { job, cancelled } => {
-                    self.gen.cancel_confirmed_at(job, cancelled, Some(now_ms()));
+                    self.generate.cancel_confirmed_at(job, cancelled, Some(now_ms()));
                 }
                 PipeDone::Profiles { domain, result } => match result {
                     Ok(profiles) => {
                         // Leaked to 'static: GenCmd::FetchProfiles carries the
                         // domain as &'static str today.
-                        self.gen.profiles_arrived(domain.leak(), profiles);
+                        self.generate.profiles_arrived(domain.leak(), profiles);
                         self.sync_gen_profiles(cx);
                         self.sync_gen_pickers(cx);
                     }
-                    Err(error) => self.gen.profiles_failed(error),
+                    Err(error) => self.generate.profiles_failed(error),
                 },
                 PipeDone::Cancelled { pipeline, result } => match result {
                     Ok(cancelled) => {
@@ -11660,7 +11658,7 @@ p2 {}
                             cancelled.cancelled,
                             cancelled.state.as_str()
                         );
-                        self.gen.pipeline_cancel_confirmed_at(
+                        self.generate.pipeline_cancel_confirmed_at(
                             pipeline,
                             cancelled.cancelled,
                             Some(now_ms()),
@@ -12717,7 +12715,7 @@ p2 {}
                         let cmds = self.model(surface).refresh();
                         self.run_cat_cmds(surface, cmds);
                     }
-                    let cmds = self.gen.ensure_profiles();
+                    let cmds = self.generate.ensure_profiles();
                     self.run_gen_cmds(cmds);
                 }
             }
@@ -12856,7 +12854,7 @@ p2 {}
                                         self.reload_fx_slot_from_store(kind, asset);
                                     }
                                 }
-                                self.gen.catalog_published(asset);
+                                self.generate.catalog_published(asset);
                             }
                         }
                     }
@@ -12951,6 +12949,20 @@ p2 {}
                             self.fx_slot_reloading[slot.index()] = false;
                             log!("fx slot {slot:?}: hot reload failed: {error}");
                         }
+                        CatPurpose::JobProfiles { .. } => {
+                            self.generate.profiles_failed(error.to_string());
+                        }
+                        CatPurpose::JobEnqueue { tag } => {
+                            self.generate.enqueue_failed_at(tag, error.to_string(), Some(now_ms()));
+                        }
+                        CatPurpose::JobStatus { job } => {
+                            self.generate.status_failed_at(
+                                job,
+                                error.to_string(),
+                                Some(now_ms()),
+                            );
+                        }
+                        CatPurpose::JobCancel { .. } => {}
                         CatPurpose::SideChannelPublish { asset } => {
                             // A store that will not take them (no write
                             // capability, an older server) is not an error
@@ -13298,6 +13310,25 @@ p2 {}
                         self.thumb_inflight.insert(revision);
                     }
                 }
+            }
+            (CatPurpose::JobProfiles { domain }, ClientOutput::JobProfiles(profiles)) => {
+                self.generate.profiles_arrived(domain, profiles);
+                self.sync_gen_profiles(cx);
+                // The flux list only exists once the image domain lands.
+                self.sync_gen_pickers(cx);
+            }
+            (CatPurpose::JobEnqueue { tag }, ClientOutput::JobQueued(job)) => {
+                let cmds = self.generate.queued_at(tag, job, Some(now_ms()));
+                self.run_gen_cmds(cmds);
+            }
+            (CatPurpose::JobStatus { .. }, ClientOutput::JobStatus(status)) => {
+                // Single-job rows only. A DREAM run is a pipeline: its
+                // record arrives through `pump_pipelines`, and nothing here
+                // advances a stage any more.
+                self.generate.status_arrived_at(&status, now_ms());
+            }
+            (CatPurpose::JobCancel { job }, ClientOutput::JobCancelled(count)) => {
+                self.generate.cancel_confirmed_at(job, count, Some(now_ms()));
             }
             (CatPurpose::SideChannelPublish { asset }, ClientOutput::SideChannels(outcome)) => {
                 match outcome {
@@ -16926,12 +16957,12 @@ p2 {}
     /// prompt re-apply at launch, so an endless stream stays endless
     /// through every reboot instead of dying with the window.
     fn save_gen_panel(&self) {
-        let prompt = self.gen.prompt.replace('\n', " ");
+        let prompt = self.generate.prompt.replace('\n', " ");
         let body = format!(
             "{}\n{}\n{}\n{}\n{}\n",
-            self.gen.selected,
-            self.gen.video_length(),
-            u8::from(self.gen.continuous()),
+            self.generate.selected,
+            self.generate.video_length(),
+            u8::from(self.generate.continuous()),
             prompt,
             u8::from(self.gen_panel_open),
         ) + &format!(
@@ -16941,8 +16972,8 @@ p2 {}
             u8::from(self.import.convert_video),
             // Appended last: a file written before the canvas picker
             // existed simply has no line here and reads as the default.
-            self.gen.size_index(),
-        ) + &format!("{}\n", self.gen.image_model_index());
+            self.generate.size_index(),
+        ) + &format!("{}\n", self.generate.image_model_index());
         let path = Self::gen_panel_path();
         if let Some(dir) = path.parent() {
             let _ = std::fs::create_dir_all(dir);
@@ -16981,27 +17012,27 @@ p2 {}
         // absent line must still take the flux default when the profiles
         // land, rather than pinning `auto` forever.
         if let Some(model) = lines.next().and_then(|l| l.parse::<usize>().ok()) {
-            self.gen.set_image_model(model);
+            self.generate.set_image_model(model);
         }
-        self.gen.select_profile(selected);
-        self.gen.set_video_length(length);
+        self.generate.select_profile(selected);
+        self.generate.set_video_length(length);
         // After the pipe, so the canvas lands in the right table, and after
         // the length, so a restored pair that no longer fits is corrected
         // on the way in rather than queued and refused.
-        self.gen.set_video_size(size);
+        self.generate.set_video_size(size);
         self.sync_gen_pickers(cx);
         self.ui
             .drop_down(cx, ids!(gen_profile))
-            .set_selected_item(cx, self.gen.selected);
+            .set_selected_item(cx, self.generate.selected);
         self.ui
             .drop_down(cx, ids!(gen_len))
-            .set_selected_item(cx, self.gen.video_length());
+            .set_selected_item(cx, self.generate.video_length());
         if !prompt.is_empty() {
-            self.gen.set_prompt(prompt.clone());
+            self.generate.set_prompt(prompt.clone());
             self.ui.text_input(cx, ids!(gen_prompt)).set_text(cx, &prompt);
         }
         if cont {
-            let cmds = self.gen.set_continuous(true, now_ms());
+            let cmds = self.generate.set_continuous(true, now_ms());
             self.run_gen_cmds(cmds);
             self.ui.check_box(cx, ids!(gen_loop)).set_active(cx, true, Animate::No);
         }
@@ -17014,7 +17045,7 @@ p2 {}
     /// Pushing the model's answer back into both widgets after any change
     /// is what keeps the drawer from showing a pair the fleet would refuse.
     fn sync_gen_pickers(&mut self, cx: &mut Cx) {
-        let labels = self.gen.size_labels();
+        let labels = self.generate.size_labels();
         let sized = !labels.is_empty();
         // A pipe with no canvas of its own (enhance takes the source clip's,
         // music has none) shows no canvas picker at all rather than a dead
@@ -17022,7 +17053,7 @@ p2 {}
         self.ui.drop_down(cx, ids!(gen_res)).set_visible(cx, sized);
         self.ui
             .drop_down(cx, ids!(gen_len))
-            .set_visible(cx, self.gen.selected_pipe().has_length());
+            .set_visible(cx, self.generate.selected_pipe().has_length());
         if sized {
             if labels != self.gen_size_labels {
                 self.gen_size_labels = labels.clone();
@@ -17030,30 +17061,30 @@ p2 {}
             }
             self.ui
                 .drop_down(cx, ids!(gen_res))
-                .set_selected_item(cx, self.gen.size_index());
+                .set_selected_item(cx, self.generate.size_index());
         }
         self.ui
             .drop_down(cx, ids!(gen_len))
-            .set_selected_item(cx, self.gen.video_length());
+            .set_selected_item(cx, self.generate.video_length());
         // The flux picker: only on pipes that render a still, and only ever
         // listing models the fleet said it serves (plus `auto`, which is
         // always honest because it pins nothing).
-        let picks_model = self.gen.selected_pipe().has_image_model();
+        let picks_model = self.generate.selected_pipe().has_image_model();
         self.ui.drop_down(cx, ids!(gen_model)).set_visible(cx, picks_model);
         if picks_model {
-            let models = self.gen.image_model_labels();
+            let models = self.generate.image_model_labels();
             if models != self.gen_model_labels {
                 self.gen_model_labels = models.clone();
                 self.ui.drop_down(cx, ids!(gen_model)).set_labels(cx, models);
             }
             self.ui
                 .drop_down(cx, ids!(gen_model))
-                .set_selected_item(cx, self.gen.image_model_index());
+                .set_selected_item(cx, self.generate.image_model_index());
         }
     }
 
     fn sync_gen_profiles(&mut self, cx: &mut Cx) {
-        let labels = crate::gen::GenModel::pipe_labels();
+        let labels = crate::generate::GenModel::pipe_labels();
         if labels != self.gen_profile_labels {
             self.gen_profile_labels = labels.clone();
             self.ui.drop_down(cx, ids!(gen_profile)).set_labels(cx, labels);
@@ -17063,12 +17094,12 @@ p2 {}
             // lie true ("gimme a jumping rabbit" came back as a picture).
             self.ui
                 .drop_down(cx, ids!(gen_profile))
-                .set_selected_item(cx, self.gen.selected);
-            let lengths = crate::gen::GenModel::video_length_labels();
+                .set_selected_item(cx, self.generate.selected);
+            let lengths = crate::generate::GenModel::video_length_labels();
             self.ui.drop_down(cx, ids!(gen_len)).set_labels(cx, lengths);
             self.ui
                 .drop_down(cx, ids!(gen_len))
-                .set_selected_item(cx, self.gen.video_length());
+                .set_selected_item(cx, self.generate.video_length());
             self.sync_gen_pickers(cx);
         }
     }
@@ -17606,14 +17637,14 @@ p2 {}
         let now = now_ms();
         // Queue position: pending rows count everyone pending who was
         // submitted before them (jobs() iterates newest first).
-        let jobs: Vec<&crate::gen::GenJob> = self.gen.jobs().collect();
+        let jobs: Vec<&crate::generate::GenJob> = self.generate.jobs().collect();
         let rows = jobs
             .iter()
             .map(|job| {
-                let ahead = matches!(job.state, crate::gen::GenJobState::Pending).then(|| {
+                let ahead = matches!(job.state, crate::generate::GenJobState::Pending).then(|| {
                     jobs.iter()
                         .filter(|other| {
-                            matches!(other.state, crate::gen::GenJobState::Pending)
+                            matches!(other.state, crate::generate::GenJobState::Pending)
                                 && other.tag < job.tag
                         })
                         .count()
@@ -17631,17 +17662,17 @@ p2 {}
         if let Some(mut list) = borrow {
             list.set_entries(cx, rows);
         }
-        let status = match &self.gen.profiles_state {
+        let status = match &self.generate.profiles_state {
             ProfilesState::Idle => "".to_string(),
             ProfilesState::Loading => "loading profiles…".to_string(),
-            ProfilesState::Ready => match (&self.gen.last_error, &self.gen.fit_note) {
+            ProfilesState::Ready => match (&self.generate.last_error, &self.generate.fit_note) {
                 (Some(error), _) => error.clone(),
                 // A picker that moved the other picker says so, in full:
                 // silently changing what the operator chose is exactly the
                 // kind of thing that gets found out mid-set.
                 (None, Some(note)) => note.clone(),
                 (None, None) => {
-                    let n = self.gen.active_jobs();
+                    let n = self.generate.active_jobs();
                     if n == 0 {
                         String::new()
                     } else {
@@ -22818,7 +22849,7 @@ impl MatchEvent for App {
 
         // ---- generate surface ----
         if let Some(index) = self.ui.drop_down(cx, ids!(gen_profile)).selected(actions) {
-            self.gen.select_profile(index);
+            self.generate.select_profile(index);
             // A different pipe offers a different canvas table (a video
             // canvas is not an image canvas), so the picker is rebuilt
             // rather than left showing the previous pipe's sizes.
@@ -22826,7 +22857,7 @@ impl MatchEvent for App {
             self.save_gen_panel();
         }
         if let Some(index) = self.ui.drop_down(cx, ids!(gen_len)).selected(actions) {
-            self.gen.set_video_length(index);
+            self.generate.set_video_length(index);
             // Either picker may have moved the other to keep the pair
             // renderable; both are re-read from the model so the drawer
             // always shows the pair that will actually be queued.
@@ -22834,16 +22865,16 @@ impl MatchEvent for App {
             self.save_gen_panel();
         }
         if let Some(index) = self.ui.drop_down(cx, ids!(gen_res)).selected(actions) {
-            self.gen.set_video_size(index);
+            self.generate.set_video_size(index);
             self.sync_gen_pickers(cx);
             self.save_gen_panel();
         }
         if let Some(index) = self.ui.drop_down(cx, ids!(gen_model)).selected(actions) {
-            self.gen.set_image_model(index);
+            self.generate.set_image_model(index);
             self.save_gen_panel();
         }
         if let Some(text) = self.ui.text_input(cx, ids!(gen_prompt)).changed(actions) {
-            self.gen.set_prompt(text);
+            self.generate.set_prompt(text);
             self.save_gen_panel();
         }
         let submit_prompt = self
@@ -22852,22 +22883,22 @@ impl MatchEvent for App {
             .returned(actions)
             .map(|(text, _)| text);
         if let Some(text) = submit_prompt {
-            self.gen.set_prompt(text);
-            self.gen.enhance_source = self.program_clip_source();
-            let cmds = self.gen.generate(now_ms());
+            self.generate.set_prompt(text);
+            self.generate.enhance_source = self.program_clip_source();
+            let cmds = self.generate.generate(now_ms());
             self.run_gen_cmds(cmds);
             self.grids_dirty = true;
         }
         if self.ui.button(cx, ids!(gen_blast)).clicked(actions) {
-            let cmds = self.gen.blast(now_ms());
+            let cmds = self.generate.blast(now_ms());
             self.run_gen_cmds(cmds);
             self.grids_dirty = true;
         }
         if self.ui.button(cx, ids!(gen_go)).clicked(actions) {
             let text = self.ui.text_input(cx, ids!(gen_prompt)).text();
-            self.gen.set_prompt(text);
-            self.gen.enhance_source = self.program_clip_source();
-            let cmds = self.gen.generate(now_ms());
+            self.generate.set_prompt(text);
+            self.generate.enhance_source = self.program_clip_source();
+            let cmds = self.generate.generate(now_ms());
             self.run_gen_cmds(cmds);
             self.grids_dirty = true;
         }
@@ -22880,8 +22911,8 @@ impl MatchEvent for App {
             // Arming reads whatever is in the prompt box right now, so the
             // operator never gets a loop of a stale prompt.
             let text = self.ui.text_input(cx, ids!(gen_prompt)).text();
-            self.gen.set_prompt(text);
-            let cmds = self.gen.set_continuous(on, now_ms());
+            self.generate.set_prompt(text);
+            let cmds = self.generate.set_continuous(on, now_ms());
             self.run_gen_cmds(cmds);
             self.grids_dirty = true;
             self.save_gen_panel();
@@ -22911,10 +22942,10 @@ impl MatchEvent for App {
         if self.ui.button(cx, ids!(gen_clear)).clicked(actions) {
             // Clearing the queue also disarms the loop: otherwise the next
             // tick refills what the operator just emptied.
-            let cmds = self.gen.set_continuous(false, now_ms());
+            let cmds = self.generate.set_continuous(false, now_ms());
             self.run_gen_cmds(cmds);
             self.ui.check_box(cx, ids!(gen_loop)).set_active(cx, false, Animate::No);
-            let cmds = self.gen.clear_queue();
+            let cmds = self.generate.clear_queue();
             self.run_gen_cmds(cmds);
             self.grids_dirty = true;
         }
@@ -22934,7 +22965,7 @@ impl MatchEvent for App {
                 }
             }
             for tag in cancel_tags {
-                let cmds = self.gen.cancel(tag);
+                let cmds = self.generate.cancel(tag);
                 self.run_gen_cmds(cmds);
                 self.grids_dirty = true;
             }
@@ -24130,11 +24161,11 @@ impl AppMain for App {
                 }
             }
             // Bounded generation-status polling.
-            let cmds = self.gen.tick(now_ms());
+            let cmds = self.generate.tick(now_ms());
             self.run_gen_cmds(cmds);
             self.pump_pipelines(cx);
             self.pump_dream_thumbs();
-            let cmds = self.gen.ensure_profiles();
+            let cmds = self.generate.ensure_profiles();
             self.run_gen_cmds(cmds);
             self.grids_dirty = true;
         }

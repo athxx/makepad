@@ -1046,7 +1046,7 @@ unsafe extern "C" fn dispatcher_func(
 }
 
 #[cfg(feature = "log")]
-extern "C" {
+unsafe extern "C" {
     fn wl_log_trampoline_to_rust_client(fmt: *const std::os::raw::c_char, list: *const c_void);
 }
 

@@ -334,7 +334,7 @@ pub const VIDIOC_ENUM_FRAMEINTERVALS: c_ulong = ioc(
 
 // --- extern "C" ---
 
-extern "C" {
+unsafe extern "C" {
     pub fn ioctl(fd: c_int, request: c_ulong, arg: *mut c_void) -> c_int;
     pub fn poll(fds: *mut pollfd, nfds: c_ulong, timeout: c_int) -> c_int;
     pub fn inotify_init1(flags: c_int) -> c_int;

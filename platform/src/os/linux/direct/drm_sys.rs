@@ -4,7 +4,7 @@
 use std::os::raw::{c_char, c_int, c_uint, c_void};
 
 #[link(name = "drm")]
-extern "C" {
+unsafe extern "C" {
     pub fn drmGetDevices2(flags: u32, devices: *mut drmDevicePtr, max_devices: c_int) -> c_int;
     pub fn drmModeGetResources(fd: c_int) -> drmModeResPtr;
     pub fn drmModeGetConnector(fd: c_int, connectorId: u32) -> drmModeConnectorPtr;

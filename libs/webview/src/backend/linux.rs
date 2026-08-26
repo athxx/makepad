@@ -109,7 +109,7 @@ struct Loader(*mut c_void);
 unsafe impl Send for Loader {}
 unsafe impl Sync for Loader {}
 
-extern "C" {
+unsafe extern "C" {
     fn dlopen(filename: *const c_char, flag: c_int) -> *mut c_void;
     fn dlsym(handle: *mut c_void, symbol: *const c_char) -> *mut c_void;
 }

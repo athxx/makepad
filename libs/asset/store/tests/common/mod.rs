@@ -24,7 +24,7 @@ pub mod raw {
         unsafe extern "C" fn(*mut c_void, c_int, *mut *mut c_char, *mut *mut c_char) -> c_int;
 
     #[link(name = "sqlite3")]
-    extern "C" {
+    unsafe extern "C" {
         fn sqlite3_open_v2(
             filename: *const c_char,
             db: *mut *mut Sqlite3,

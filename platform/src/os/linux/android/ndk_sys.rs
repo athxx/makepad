@@ -31,7 +31,7 @@ pub struct AAsset {
 pub const AASSET_MODE_BUFFER: ::std::os::raw::c_uint = 3;
 
 #[link(name = "android")]
-extern "C" {
+unsafe extern "C" {
     pub fn AAssetManager_open(
         mgr: *mut AAssetManager,
         filename: *const ::std::os::raw::c_char,
@@ -84,7 +84,7 @@ pub type AChoreographerPostCallbackFn = unsafe extern "C" fn(
 ) -> i32;
 
 #[cfg(not(no_android_choreographer))]
-extern "C" {
+unsafe extern "C" {
     // AChoreographer_getInstance was introduced in API 24, so it's safe to
     // link directly at our minSdk floor (26).
     pub fn AChoreographer_getInstance() -> *mut AChoreographer;

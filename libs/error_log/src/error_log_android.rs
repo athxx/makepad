@@ -7,7 +7,7 @@ pub fn log_with_type(file:&str, line_start:u32, column_start:u32, _line_end:u32,
     unsafe{__android_log_write(3, "Makepad\0".as_ptr(), msg.as_ptr())};
 }
 
-extern "C" { 
+unsafe extern "C" { 
     pub fn __android_log_write(prio: c_int, tag: *const u8, text: *const u8) -> c_int;
 }
 

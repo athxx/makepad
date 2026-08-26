@@ -72,7 +72,7 @@ unsafe extern "C" {
 }
 
 #[link(name = "objc")]
-extern "C" {
+unsafe extern "C" {
     /// libobjc: replace an instance's class at runtime (isa swizzle).
     /// Returns the previous class.
     pub fn object_setClass(obj: ObjcId, cls: ObjcId) -> ObjcId;

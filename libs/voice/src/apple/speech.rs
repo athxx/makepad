@@ -11,7 +11,7 @@ struct CSegment {
     end_ms: i64,
 }
 
-extern "C" {
+unsafe extern "C" {
     /// Swift @_cdecl uses OpaquePointer for the segments pointer,
     /// which maps to void* in C. We cast on the Rust side.
     fn apple_speech_transcribe(

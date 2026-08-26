@@ -297,7 +297,7 @@ pub const XKB_KEY_Hyper_R: xkb_keysym_t = 0xffee;
 pub const XKB_KEY_ISO_Left_Tab: xkb_keysym_t = 0xfe20;
 
 #[link(name = "xkbcommon")]
-extern "C" {
+unsafe extern "C" {
     // Context management
     pub fn xkb_context_new(flags: u32) -> *mut xkb_context;
     pub fn xkb_context_unref(context: *mut xkb_context);

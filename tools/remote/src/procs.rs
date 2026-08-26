@@ -224,7 +224,7 @@ fn list_processes_impl() -> io::Result<Vec<Proc>> {
 
 #[cfg(unix)]
 fn kill_pid_impl(pid: u32) -> io::Result<()> {
-    extern "C" {
+    unsafe extern "C" {
         fn kill(pid: i32, sig: i32) -> i32;
     }
     const SIGTERM: i32 = 15;
@@ -242,7 +242,7 @@ fn kill_pid_impl(pid: u32) -> io::Result<()> {
 
 #[cfg(unix)]
 fn is_alive_impl(pid: u32) -> bool {
-    extern "C" {
+    unsafe extern "C" {
         fn kill(pid: i32, sig: i32) -> i32;
         fn waitpid(pid: i32, status: *mut i32, options: i32) -> i32;
     }

@@ -90,8 +90,8 @@ workspace.members = [
     # === xr app ===
     "xr",
     # === studio ===
-    "studio/hub",
-    "studio/desktop",
+    "examples/studio/hub",
+    "examples/studio/desktop",
     # === own SQLite-format database engine (P0 reader, sqlq CLI) ===
     "libs/sqlite_query",
     # === headless music score engine ===
@@ -256,9 +256,9 @@ workspace.resolver = "2"
 #debug = true
 
 [patch.crates-io]
-bitflags = { path = "libs/bitflags" }
-smallvec = { path = "libs/smallvec" }
-windows-link = { path = "libs/windows/windows-link" }
+bitflags = { path = "vendor/bitflags" }
+smallvec = { path = "vendor/smallvec" }
+windows-link = { path = "vendor/windows/windows-link" }
 
 [profile.small]
 inherits = "release"

@@ -188,7 +188,7 @@ pub fn activate_cocoa_window_on_pointer_down(window: ObjcId) -> bool {
     }
 }
 
-extern "C" {
+unsafe extern "C" {
     /// libobjc: the hook called with an exception object before it is
     /// thrown. The only place that still sees the reason when the unwind
     /// later meets a Rust frame and aborts ("Rust cannot catch foreign

@@ -324,17 +324,17 @@ pub const XK_KP_Delete: u32 = 0xff9f;
 pub const LC_CTYPE: c_int = 0;
 
 #[link(name = "c")]
-extern "C" {
+unsafe extern "C" {
     pub fn setlocale(category: c_int, locale: *const c_char) -> *mut c_char;
 }
 
 #[link(name = "Xcursor")]
-extern "C" {
+unsafe extern "C" {
     pub fn XcursorLibraryLoadCursor(dpy: *mut Display, file: *const c_char) -> Cursor;
 }
 
 #[link(name = "X11")]
-extern "C" {
+unsafe extern "C" {
     pub fn XOpenDisplay(arg1: *const c_char) -> *mut Display;
 
     pub fn XConnectionNumber(arg1: *mut Display) -> c_int;

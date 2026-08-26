@@ -272,7 +272,7 @@ pub struct _snd_seq_port_info {
 pub type snd_seq_port_info_t = _snd_seq_port_info;
 
 #[link(name = "asound")]
-extern "C" {
+unsafe extern "C" {
 
     pub fn snd_seq_open(
         handle: *mut *mut snd_seq_t,

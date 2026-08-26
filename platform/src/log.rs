@@ -22,7 +22,7 @@ fn android_logcat_write(
     level: LogLevel,
 ) {
     use std::ffi::c_int;
-    extern "C" {
+    unsafe extern "C" {
         pub fn __android_log_write(prio: c_int, tag: *const u8, text: *const u8) -> c_int;
     }
 
@@ -61,7 +61,7 @@ pub(crate) fn log_with_level_makepad_platform(
     #[cfg(target_arch = "wasm32")]
     {
         #[link(wasm_import_module = "env")]
-        extern "C" {
+        unsafe extern "C" {
             pub fn js_console_log(u8_ptr: u32, len: u32);
             pub fn js_console_error(u8_ptr: u32, len: u32);
         }

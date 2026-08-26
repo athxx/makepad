@@ -25,7 +25,7 @@ use std::os::raw::{c_char, c_void};
 use std::time::Instant;
 
 #[link(name = "nativewindow")]
-extern "C" {
+unsafe extern "C" {
     fn ANativeWindow_acquire(window: *mut ndk_sys::ANativeWindow);
 }
 

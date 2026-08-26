@@ -7,7 +7,7 @@ description = "Reusable progressive GPU ray tracer on makepad's shader stack"
 [dependencies]
 makepad-draw = { path = "../../draw", version = "2.0.0" }
 makepad-gltf = { path = "../gltf", version = "1.0.0" }
-makepad-zune-png = { path = "../zune/zune-png" }
+makepad-zune-png = { path = "../../vendor/zune/zune-png" }
 
 [dev-dependencies]
 makepad-render = { path = "../render", version = "0.1.0" }

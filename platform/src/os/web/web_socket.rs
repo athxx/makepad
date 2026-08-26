@@ -10,7 +10,7 @@ pub struct OsWebSocket {
     id: u64,
 }
 
-extern "C" {
+unsafe extern "C" {
     pub fn js_open_web_socket(id: u32, url_ptr: u32, url_len: u32);
     pub fn js_web_socket_send_string(id: u32, str_ptr: u32, url_len: u32);
     pub fn js_web_socket_send_binary(id: u32, bin_ptr: u32, bin_len: u32);

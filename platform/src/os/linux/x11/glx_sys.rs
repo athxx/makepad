@@ -11,7 +11,7 @@ pub(crate) type GLXContext = *mut c_void;
 pub(crate) const True: u32 = 1;
 
 #[link(name = "GLX")]
-extern "C" {
+unsafe extern "C" {
     pub(crate) fn glXCreateContext(
         dpy: *mut Display,
         vis: *mut XVisualInfo,

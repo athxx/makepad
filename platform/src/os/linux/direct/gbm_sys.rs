@@ -38,7 +38,7 @@ pub const GBM_BO_USE_SCANOUT: u32 = 1 << 0;
 pub const GBM_BO_USE_RENDERING: u32 = 1 << 2;
 
 #[link(name = "gbm")]
-extern "C" {
+unsafe extern "C" {
     pub fn gbm_create_device(fd: c_int) -> *mut gbm_device;
     pub fn gbm_surface_create(
         gbm: *mut gbm_device,

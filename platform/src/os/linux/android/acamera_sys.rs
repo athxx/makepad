@@ -239,13 +239,13 @@ pub struct AImage {
 }
 
 #[link(name = "nativewindow")]
-extern "C" {
+unsafe extern "C" {
     pub fn ANativeWindow_acquire(window: *mut ANativeWindow);
     pub fn ANativeWindow_release(window: *mut ANativeWindow);
 }
 
 #[link(name = "mediandk")]
-extern "C" {
+unsafe extern "C" {
 
     pub fn AImageReader_new(
         width: i32,
@@ -313,7 +313,7 @@ extern "C" {
 }
 
 #[link(name = "camera2ndk")]
-extern "C" {
+unsafe extern "C" {
     pub fn ACameraManager_create() -> *mut ACameraManager;
     pub fn ACameraManager_delete(manager: *mut ACameraManager);
     pub fn ACameraManager_getCameraIdList(

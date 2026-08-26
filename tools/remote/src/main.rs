@@ -630,7 +630,7 @@ fn spawn_detached(cwd: &Path, command: &str) -> io::Result<(u32, PathBuf)> {
         use std::os::unix::process::CommandExt;
         unsafe {
             cmd.pre_exec(|| {
-                extern "C" {
+                unsafe extern "C" {
                     fn setpgid(pid: i32, pgid: i32) -> i32;
                 }
                 setpgid(0, 0);

@@ -462,7 +462,7 @@ macro_rules! app_main {
 #[napi_derive_ohos::module_exports]
 fn init(exports: napi_ohos::JsObject, env: napi_ohos::Env) -> napi_ohos::Result<()> {
     #[allow(improper_ctypes)]
-    extern "C" {
+    unsafe extern "C" {
         fn ohos_init_app_main(
             exports: napi_ohos::JsObject,
             env: napi_ohos::Env,

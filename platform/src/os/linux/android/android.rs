@@ -100,7 +100,7 @@ const ANDROID_XR_FIXED_FOVEATION_LEVEL: u8 = 3;
 
 fn android_debug_log(prio: i32, msg: &str) {
     use std::ffi::c_int;
-    extern "C" {
+    unsafe extern "C" {
         pub fn __android_log_write(prio: c_int, tag: *const u8, text: *const u8) -> c_int;
     }
     let msg = format!("{msg}\0");

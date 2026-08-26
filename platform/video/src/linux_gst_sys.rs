@@ -113,7 +113,7 @@ pub struct GstMessageRepr {
 }
 
 // dlopen, straight from glibc — no libc crate in this tree.
-extern "C" {
+unsafe extern "C" {
     fn dlopen(filename: *const c_char, flag: c_int) -> *mut c_void;
     fn dlsym(handle: *mut c_void, symbol: *const c_char) -> *mut c_void;
 }

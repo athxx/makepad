@@ -14,7 +14,7 @@
 use makepad_asset_data::AssetId;
 use makepad_widgets::*;
 use crate::decks::{FadeCurve, FADE_CURVES};
-use crate::gen::{GenJob, GenJobState, GenJobTone, StageChip};
+use crate::generate::{GenJob, GenJobState, GenJobTone, StageChip};
 
 script_mod! {
     use mod.prelude.widgets_internal.*

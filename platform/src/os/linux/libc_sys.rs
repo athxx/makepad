@@ -57,7 +57,7 @@ pub const SYS_GETTID: c_long = 178;
 #[cfg(not(any(target_arch = "x86_64", target_arch = "aarch64")))]
 pub const SYS_GETTID: c_long = 178; // fallback, may need updating for other arches
 
-extern "C" {
+unsafe extern "C" {
     pub fn dlopen(filename: *const c_char, flag: c_int) -> *mut c_void;
     pub fn dlclose(handle: *mut c_void) -> c_int;
     pub fn dlsym(handle: *mut c_void, symbol: *const c_char) -> *mut c_void;

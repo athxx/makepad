@@ -398,7 +398,7 @@ pub struct pa_mainloop_api {
 }
 
 #[link(name = "pulse")]
-extern "C" {
+unsafe extern "C" {
     pub fn pa_context_connect(
         c: *mut pa_context,
         server: *const c_char,
