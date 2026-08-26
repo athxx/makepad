@@ -12,15 +12,3 @@ metadata.makepad-auto-version = "yK9xdn_D0D3EdqleI-WHLtjk4rk="
 [dependencies]
 makepad-micro-serde-derive = { path = "derive", version = "1.0.0" }
 makepad-live-id = {path = "../live_id", version = "1.0.0" }
-
-[dev-dependencies]
-criterion = "0.8"
-# asun (Array-Schema Unified Notation): text + binary encoder. The local 1.1.0
-# is serde-free — it uses its own AsunEncode/AsunDecode derives (which emit BOTH
-# the text and binary trait impls), so the bench structs derive those instead of
-# serde. See benches/formats.rs.
-asun = { version = "1.1", path = "../../../../asun/asun-rs" }
-
-[[bench]]
-name = "formats"
-harness = false
