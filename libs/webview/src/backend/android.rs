@@ -460,41 +460,24 @@ extern "C" fn Java_dev_makepad_android_MakepadNative_onWebViewLoadFailed(
 use makepad_micro_serde::DeJson;
 
 // ---------------------------------------------------------------------------
-// Required platform additions (device-side; NOT made in this crate)
+// Device-side counterpart (implemented in the platform's Android support)
 // ---------------------------------------------------------------------------
 //
-// TODO(android-device): This backend calls Java helper methods that do not yet
-// exist on `MakepadActivity`, and JNI callbacks whose `native` declarations do
-// not yet exist on `MakepadNative`. They must be added to the platform's Android
-// support (in `tools/cargo_makepad/src/android/java/dev/makepad/android/`)
-// before this compiles/links on-device:
+// The Java helpers this backend calls, and the `native` callbacks it exports,
+// live in `tools/cargo_makepad/src/android/java/dev/makepad/android/`:
 //
 //   MakepadActivity.java — each method does `runOnUiThread` and manages a
-//   per-id `WebView` inside a dedicated overlay `FrameLayout` (mirror the
-//   existing `mCameraPreviewOverlay` machinery):
+//   per-id `WebView` inside `mWebViewOverlay` (mirrors the `mCameraPreviewOverlay`
+//   machinery):
 //     void makepadWebViewCreate(long id, String interfaceName,
 //                               String injectionScript, String url, boolean visible)
-//       - new WebView(this); settings.setJavaScriptEnabled(true);
-//       - addJavascriptInterface(new Object(){
-//             @JavascriptInterface public void postMessage(String json){
-//                 MakepadNative.onWebViewMessage(id, json); } }, interfaceName);
-//       - setWebViewClient(new WebViewClient(){
-//             onPageStarted(v,url,fav){ v.evaluateJavascript(injectionScript,null);
-//                                       MakepadNative.onWebViewLoadStarted(id,url); }
-//             onPageFinished(v,url){ MakepadNative.onWebViewLoadFinished(id,url); }
-//             onReceivedError(...){ MakepadNative.onWebViewLoadFailed(id,url,desc); } });
-//       - add to overlay FrameLayout; loadUrl(url); set visibility from `visible`.
 //     void makepadWebViewLoadUrl(long id, String url)
 //     void makepadWebViewUpdateRect(long id, int l, int t, int r, int b, boolean visible)
-//       - position/size via FrameLayout.LayoutParams (leftMargin/topMargin, w/h)
-//         in physical px, and setVisibility(visible?VISIBLE:GONE).
 //     void makepadWebViewHistoryGo(long id, int delta)
-//       - loop goBack()/goForward() |delta| times (respecting canGoBack/Forward).
-//     void makepadWebViewEvalJs(long id, String script)  -> evaluateJavascript.
+//     void makepadWebViewEvalJs(long id, String script)
 //     void makepadWebViewDetach(long id)
-//       - overlay.removeView(webView); webView.destroy(); forget the id.
 //
-//   MakepadNative.java — declare the four callbacks this file exports:
+//   MakepadNative.java — declares the four callbacks this file exports:
 //     public static native void onWebViewMessage(long id, String json);
 //     public static native void onWebViewLoadStarted(long id, String url);
 //     public static native void onWebViewLoadFinished(long id, String url);

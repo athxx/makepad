@@ -1048,6 +1048,10 @@ public class MakepadActivity
     private ImageView mSurfaceSnapshotOverlay;
     private FrameLayout mCameraPreviewOverlay;
     private HashMap<Long, CameraPreviewSurface> mCameraPreviewViews = new HashMap<>();
+
+    // native webview overlays (makepad-webview backend), keyed by the web view's id
+    private FrameLayout mWebViewOverlay;
+    private HashMap<Long, android.webkit.WebView> mWebViews = new HashMap<>();
     private Bitmap mLatestSurfaceSnapshot;
     private int mLatestSurfaceSnapshotOrientation = android.content.res.Configuration.ORIENTATION_UNDEFINED;
     private boolean mSurfaceSnapshotCopyInFlight = false;
@@ -1300,6 +1304,13 @@ public class MakepadActivity
         mCameraPreviewOverlay = new FrameLayout(this);
         mRootLayout.addView(mCameraPreviewOverlay);
 
+        mWebViewOverlay = new FrameLayout(this);
+        mWebViewOverlay.setLayoutParams(new FrameLayout.LayoutParams(
+            ViewGroup.LayoutParams.MATCH_PARENT,
+            ViewGroup.LayoutParams.MATCH_PARENT
+        ));
+        mRootLayout.addView(mWebViewOverlay);
+
         mSelectionHandleOverlay = new FrameLayout(this);
         mSelectionHandleOverlay.setLayoutParams(new FrameLayout.LayoutParams(
             ViewGroup.LayoutParams.MATCH_PARENT,
@@ -1393,6 +1404,15 @@ public class MakepadActivity
             }
             mCameraPreviewViews.clear();
             mCameraPreviewOverlay.removeAllViews();
+        }
+        if (mWebViewOverlay != null) {
+            for (android.webkit.WebView webView : mWebViews.values()) {
+                mWebViewOverlay.removeView(webView);
+                webView.loadUrl("about:blank");
+                webView.destroy();
+            }
+            mWebViews.clear();
+            mWebViewOverlay.removeAllViews();
         }
         if (mSelectionHandleOverlay != null) {
             mSelectionHandleOverlay.removeAllViews();
@@ -2821,6 +2841,168 @@ public class MakepadActivity
                 CameraPreviewSurface preview = mCameraPreviewViews.remove(videoId);
                 if (preview != null && mCameraPreviewOverlay != null) {
                     mCameraPreviewOverlay.removeView(preview);
+                }
+            }
+        });
+    }
+
+    // ------------------------------------------------------------------------
+    // Native webview overlay (makepad-webview `Native` backend on Android).
+    //
+    // Called via JNI from libs/webview/src/backend/android.rs. Each method hops
+    // onto the UI thread (every android.webkit.WebView method must run there) and
+    // manages a per-id WebView inside mWebViewOverlay, mirroring the camera
+    // preview overlay machinery above. Java→Rust events go back through the
+    // MakepadNative.onWebView* natives, carrying the same u64 id.
+    // ------------------------------------------------------------------------
+
+    @android.annotation.SuppressLint({"SetJavaScriptEnabled", "AddJavascriptInterface"})
+    public void makepadWebViewCreate(final long id, final String interfaceName,
+                                     final String injectionScript, final String url,
+                                     final boolean visible) {
+        runOnUiThread(new Runnable() {
+            @Override
+            public void run() {
+                if (mWebViewOverlay == null || mWebViews.containsKey(id)) {
+                    return;
+                }
+                android.webkit.WebView webView = new android.webkit.WebView(MakepadActivity.this);
+                android.webkit.WebSettings settings = webView.getSettings();
+                settings.setJavaScriptEnabled(true);
+                settings.setDomStorageEnabled(true);
+                settings.setMediaPlaybackRequiresUserGesture(false);
+                settings.setBuiltInZoomControls(true);
+                settings.setDisplayZoomControls(false);
+                settings.setLoadWithOverviewMode(true);
+                settings.setUseWideViewPort(true);
+                if (Build.VERSION.SDK_INT >= 21) {
+                    settings.setMixedContentMode(android.webkit.WebSettings.MIXED_CONTENT_COMPATIBILITY_MODE);
+                }
+
+                // JS → Rust bridge: page code calls window.<interfaceName>.postMessage(json).
+                webView.addJavascriptInterface(new Object() {
+                    @android.webkit.JavascriptInterface
+                    public void postMessage(String json) {
+                        MakepadNative.onWebViewMessage(id, json);
+                    }
+                }, interfaceName);
+
+                webView.setWebViewClient(new android.webkit.WebViewClient() {
+                    @Override
+                    public void onPageStarted(android.webkit.WebView view, String pageUrl, android.graphics.Bitmap favicon) {
+                        // Re-inject the document-start bridge script on every navigation.
+                        if (injectionScript != null && !injectionScript.isEmpty()) {
+                            view.evaluateJavascript(injectionScript, null);
+                        }
+                        MakepadNative.onWebViewLoadStarted(id, pageUrl);
+                    }
+                    @Override
+                    public void onPageFinished(android.webkit.WebView view, String pageUrl) {
+                        MakepadNative.onWebViewLoadFinished(id, pageUrl);
+                    }
+                    @Override
+                    public void onReceivedError(android.webkit.WebView view, android.webkit.WebResourceRequest request,
+                                                android.webkit.WebResourceError error) {
+                        // Only report main-frame failures; subresource errors are noise.
+                        if (request != null && request.isForMainFrame()) {
+                            String desc = (error != null && error.getDescription() != null)
+                                ? error.getDescription().toString() : "load error";
+                            String failUrl = (request.getUrl() != null) ? request.getUrl().toString() : url;
+                            MakepadNative.onWebViewLoadFailed(id, failUrl, desc);
+                        }
+                    }
+                });
+
+                FrameLayout.LayoutParams lp = new FrameLayout.LayoutParams(1, 1);
+                lp.leftMargin = 0;
+                lp.topMargin = 0;
+                webView.setLayoutParams(lp);
+                webView.setVisibility(visible ? View.VISIBLE : View.GONE);
+                mWebViews.put(id, webView);
+                mWebViewOverlay.addView(webView);
+                webView.loadUrl(url);
+            }
+        });
+    }
+
+    public void makepadWebViewLoadUrl(final long id, final String url) {
+        runOnUiThread(new Runnable() {
+            @Override
+            public void run() {
+                android.webkit.WebView webView = mWebViews.get(id);
+                if (webView != null) {
+                    webView.loadUrl(url);
+                }
+            }
+        });
+    }
+
+    public void makepadWebViewUpdateRect(final long id, final int left, final int top,
+                                         final int right, final int bottom, final boolean visible) {
+        runOnUiThread(new Runnable() {
+            @Override
+            public void run() {
+                android.webkit.WebView webView = mWebViews.get(id);
+                if (webView == null) {
+                    return;
+                }
+                FrameLayout.LayoutParams lp = new FrameLayout.LayoutParams(
+                    Math.max(1, right - left),
+                    Math.max(1, bottom - top)
+                );
+                lp.leftMargin = left;
+                lp.topMargin = top;
+                webView.setLayoutParams(lp);
+                webView.setVisibility(visible ? View.VISIBLE : View.GONE);
+            }
+        });
+    }
+
+    public void makepadWebViewHistoryGo(final long id, final int delta) {
+        runOnUiThread(new Runnable() {
+            @Override
+            public void run() {
+                android.webkit.WebView webView = mWebViews.get(id);
+                if (webView == null || delta == 0) {
+                    return;
+                }
+                int steps = Math.abs(delta);
+                if (delta < 0) {
+                    for (int i = 0; i < steps && webView.canGoBack(); i++) {
+                        webView.goBack();
+                    }
+                } else {
+                    for (int i = 0; i < steps && webView.canGoForward(); i++) {
+                        webView.goForward();
+                    }
+                }
+            }
+        });
+    }
+
+    public void makepadWebViewEvalJs(final long id, final String script) {
+        runOnUiThread(new Runnable() {
+            @Override
+            public void run() {
+                android.webkit.WebView webView = mWebViews.get(id);
+                if (webView != null) {
+                    webView.evaluateJavascript(script, null);
+                }
+            }
+        });
+    }
+
+    public void makepadWebViewDetach(final long id) {
+        runOnUiThread(new Runnable() {
+            @Override
+            public void run() {
+                android.webkit.WebView webView = mWebViews.remove(id);
+                if (webView != null) {
+                    if (mWebViewOverlay != null) {
+                        mWebViewOverlay.removeView(webView);
+                    }
+                    webView.loadUrl("about:blank");
+                    webView.destroy();
                 }
             }
         });

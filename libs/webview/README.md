@@ -165,10 +165,205 @@ via the bridge). Handle them like any widget action.
 
 ### Backend availability
 
-The `Native` backend is currently implemented for macOS and iOS. On other
-platforms without the `cef` feature the widget renders an "unsupported backend"
-message rather than a web view. Build with `--features cef` to use the CEF
-backend where Native is unavailable.
+The `Native` backend is implemented for **macOS, iOS, Windows, Linux, Android,
+and Web (wasm)** — every platform in the table at the top of this file. On any
+other target the widget falls back to a no-op backend that renders nothing
+(`WebViewError::Unsupported`); build with `--features cef` to force the CEF
+backend there instead.
+
+See [Developing on each platform](#developing-on-each-platform) below for the
+prerequisites, build commands, and platform-specific notes for each.
+
+---
+
+## Developing on each platform
+
+The Rust code is the **same on every platform** — you write the `Browser`
+widget (or the `WebView` handle) once and it compiles everywhere. What differs
+is the toolchain, the build/run command, and a few platform quirks (permissions,
+signing, the JS bridge transport). This section walks through each.
+
+Everything below uses the [`examples/webview`](../../examples/webview) app as
+the concrete thing being built. It is a single button that opens
+`https://google.com` inside an embedded web view — the smallest complete app
+that exercises this crate. Swap `-p makepad-example-webview` for your own crate.
+
+Desktop targets (macOS, Windows, Linux) build with plain `cargo`. Mobile and
+wasm go through the [`cargo-makepad`](../../tools/cargo_makepad) helper, which
+packages the app, generates the manifest/Info.plist, and handles install/run.
+Install it once from the workspace root:
+
+```bash
+cargo install --path tools/cargo_makepad
+# or run it in place without installing:
+cargo run -p cargo-makepad -- <args>
+```
+
+### macOS
+
+Native backend: **`WKWebView`**, overlaid on the Makepad surface by
+`makepad-platform` itself. Nothing extra to install — the system web view ships
+with the OS.
+
+```bash
+# Just run it like any Rust binary:
+cargo run -p makepad-example-webview
+
+# For a signed/bundled .app (needed for notarization, camera/mic prompts, etc.):
+cargo makepad desktop run -p makepad-example-webview
+```
+
+Notes:
+- No entitlement is required to load `https://` pages in a `WKWebView`.
+- App Transport Security blocks plain `http://` by default — use `https://`, or
+  add an ATS exception to the app's Info.plist if you must load cleartext.
+
+### iOS
+
+Same `WKWebView` backend as macOS. Build through `cargo-makepad`, which creates
+the provisioning-signed `.ipa`/simulator bundle:
+
+```bash
+# one-time: add the iOS Rust targets
+cargo makepad apple ios install-toolchain
+
+# run on the booted simulator:
+cargo makepad apple ios run-sim -p makepad-example-webview
+
+# run on a real device (needs a provisioning profile — see below):
+cargo makepad apple ios \
+    --org=MyOrg --app=MyApp \
+    run-device -p makepad-example-webview
+```
+
+Notes:
+- A real device needs a provisioning profile. The simplest way to get one:
+  create an empty app in Xcode with a matching **organisation** and **product**
+  name, run it on the device once, then pass those exact names to `--org` /
+  `--app`. Run `cargo makepad apple list` to see available certs/profiles/devices.
+- The first web-view open in the simulator shows a ~1–2s white screen (cold
+  start of the web content process). This is the simulator, not the code — use
+  `BrowserLoad.Deferred`/`Eager` to warm it up (see [Load & dispose policy](#load--dispose-policy)).
+- Cleartext `http://` is blocked by ATS just like macOS.
+
+### Windows
+
+Native backend: **WebView2** (`ICoreWebView2`), the system Edge/Chromium web
+view. Reached through hand-rolled COM FFI — no `windows` crate dependency.
+
+```bash
+cargo run -p makepad-example-webview
+# or, for the icon-autodetecting desktop build:
+cargo makepad desktop run -p makepad-example-webview
+```
+
+Notes:
+- WebView2 requires the **WebView2 Runtime** to be present. It ships with
+  Windows 11 and current Windows 10; on older machines Microsoft's Evergreen
+  installer provides it. If the runtime is missing, `WebView::new` returns
+  `WebViewError::Backend(...)` — surface that to the user rather than assuming
+  success.
+- The web view runs in its own browser process (standard WebView2 architecture);
+  it is torn down when you `detach`/dispose.
+
+### Linux
+
+Native backend: **WebKitGTK**. You need the GTK + WebKitGTK development
+libraries installed.
+
+```bash
+# Debian/Ubuntu — install GTK/WebKitGTK and the other makepad deps:
+cargo makepad linux apt-get-install-makepad-deps
+# (or manually: sudo apt-get install libwebkit2gtk-4.1-dev libgtk-3-dev)
+
+cargo run -p makepad-example-webview
+```
+
+Notes:
+- The `-dev` packages are required at **build** time; the runtime `.so`s must be
+  present on the target machine too.
+- On Wayland vs X11 the overlay attaches the same way; no code change needed.
+
+### Android
+
+Native backend: **`android.webkit.WebView`**. Rust never touches the web view
+directly — it calls thin helper methods on `MakepadActivity` over JNI, each of
+which hops to the UI thread (mirroring the camera-preview overlay). The Java
+side lives in
+[`tools/cargo_makepad/.../MakepadActivity.java`](../../tools/cargo_makepad/src/android/java/dev/makepad/android/MakepadActivity.java);
+you do not write any Java yourself — `cargo-makepad` compiles and packages it.
+
+```bash
+# one-time: download the SDK/NDK and add the Android Rust targets
+cargo makepad android install-toolchain
+
+# build + install + run on a connected device (adb):
+cargo makepad android run -p makepad-example-webview \
+    --package-name="dev.makepad.webview" \
+    --app-label="WebView Demo"
+```
+
+Notes:
+- **The app must declare the `INTERNET` permission** to load remote pages.
+  `cargo-makepad` generates the manifest and already includes it (see
+  `tools/cargo_makepad/src/android/mod.rs`); if you supply your own manifest,
+  add `<uses-permission android:name="android.permission.INTERNET"/>` yourself.
+- The JS bridge transport is an `@JavascriptInterface` object named `vsbridge`;
+  page code still uses `window.vs.postMessage(...)` — the injected document-start
+  script forwards it. This is invisible to your app code.
+- Multiple `Browser`/`WebView`s coexist in the single app process, each keyed by
+  its `id`. (This is the same-process model behind WeChat-style "multiple
+  mini-programs in one app"; it does **not** give each web view its own OS task —
+  that would need a multi-Activity/multi-process setup makepad does not have.)
+- `--abi` selects target ABIs (default `aarch64`); pass e.g.
+  `--abi=aarch64,armv7` for a multi-arch build. Add the same ABIs to
+  `install-toolchain`.
+
+### Web (wasm)
+
+Native backend: an **`<iframe>` overlay** positioned over the wasm canvas. The
+JS bridge uses `postMessage` between the host page and the iframe instead of a
+native interface.
+
+```bash
+# one-time: install the wasm toolchain
+cargo makepad wasm install-toolchain
+
+# build + serve at http://localhost:8010
+cargo makepad wasm run -p makepad-example-webview
+```
+
+Notes:
+- Because it is a real `<iframe>`, the **same-origin policy and the target
+  site's `X-Frame-Options` / `Content-Security-Policy: frame-ancestors` apply**.
+  Many big sites (Google, most banks) send `X-Frame-Options: DENY` and simply
+  refuse to render in an iframe — there is nothing this crate can do about that.
+  Test with a page you control or one that permits framing.
+- `eval_js` / `post_to_js` only reach a **same-origin** iframe; cross-origin
+  frames can exchange `BridgeMessage`s via `postMessage` but cannot be scripted
+  arbitrarily.
+- Serve over HTTPS in production; mixed content (an `http://` iframe on an
+  `https://` host) is blocked by the browser.
+
+### The CEF backend (optional, any desktop platform)
+
+Instead of the system web view you can embed **Chromium via CEF**, rendered to a
+Makepad texture. This is opt-in behind the `cef` feature and needs the prebuilt
+CEF binaries downloaded first:
+
+```bash
+# fetch the prebuilt CEF distribution for your host into local/cef-prebuilt/
+./download_cef.sh
+
+# build/run with the cef feature; force the backend in script with
+# `backend: BrowserBackend.CEF` (or Backend::Cef via the handle):
+cargo run -p makepad-example-webview --features cef
+```
+
+Use CEF when you need a consistent Chromium across all desktop OSes, texture-
+level compositing, or a platform where no system web view is available.
+See [`download_cef.sh --help`](../../download_cef.sh) for pinning a version,
+channel, or cross-platform download.
 
 ---
 

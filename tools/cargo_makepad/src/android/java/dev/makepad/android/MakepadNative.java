@@ -39,6 +39,12 @@ public class MakepadNative {
     public native static void onWebSocketClosed(long callback);
     public native static void onWebSocketError(String error, long callback);
 
+    // webview (makepad-webview backend) — keyed by the web view's u64 id
+    public native static void onWebViewMessage(long id, String json);
+    public native static void onWebViewLoadStarted(long id, String url);
+    public native static void onWebViewLoadFinished(long id, String url);
+    public native static void onWebViewLoadFailed(long id, String url, String error);
+
     // clipboard
     public native static void onClipboardAction(String action);
     public native static void onClipboardPaste(String content);
