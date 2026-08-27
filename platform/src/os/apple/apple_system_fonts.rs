@@ -306,7 +306,7 @@ fn assemble_sfnt(mut tables: Vec<(u32, Vec<u8>)>) -> Vec<u8> {
 
     const HEAD_TAG: u32 = u32::from_be_bytes(*b"head");
 
-    // Copy table data first (so we can checksum it) and remember where `head` lives.
+    // Copy table data into place and remember where `head` lives.
     let mut head_offset: Option<usize> = None;
     for (i, (tag, bytes)) in tables.iter().enumerate() {
         let off = offsets[i] as usize;
@@ -316,8 +316,9 @@ fn assemble_sfnt(mut tables: Vec<(u32, Vec<u8>)>) -> Vec<u8> {
         }
     }
 
-    // Zero head.checkSumAdjustment (offset 8 within the head table) before
-    // computing checksums, per spec.
+    // Zero head.checkSumAdjustment (offset 8 within the head table), per spec —
+    // see the directory-record note below for why we leave it (and all per-table
+    // checkSum fields) at 0 rather than computing a real adjustment.
     if let Some(off) = head_offset {
         if off + 12 <= buf.len() {
             buf[off + 8..off + 12].copy_from_slice(&0u32.to_be_bytes());
@@ -325,29 +326,23 @@ fn assemble_sfnt(mut tables: Vec<(u32, Vec<u8>)>) -> Vec<u8> {
     }
 
     // Write the table directory records (tag / checkSum / offset / length).
+    //
+    // The per-record `checkSum` field and `head.checkSumAdjustment` are both
+    // left at 0. `ttf_parser` (this fork's consumer) never verifies either, and
+    // for Apple's CJK super-fonts computing them is not free: the sum runs over
+    // every table plus the whole file, and PingFang's `hvgl` outline table alone
+    // is ~54MB, so the two checksum passes cost ~100ms per first-seen CJK script
+    // — the dominant term in the first-draw fallback stall. A `head`
+    // checkSumAdjustment of 0 is explicitly permitted by the OpenType spec, and
+    // an all-zero directory checksum is harmless to a non-verifying parser, so
+    // we skip both scans entirely. (`head.checkSumAdjustment` was already zeroed
+    // above before this point, so nothing more is needed for it here.)
     for (i, (tag, bytes)) in tables.iter().enumerate() {
         let rec = header_len + i * 16;
-        let off = offsets[i] as usize;
-        // Checksum over the padded table bytes as they sit in the buffer.
-        let padded_end = if i + 1 < tables.len() {
-            offsets[i + 1] as usize
-        } else {
-            total_len
-        };
-        let checksum = sfnt_checksum(&buf[off..padded_end]);
         buf[rec..rec + 4].copy_from_slice(&tag.to_be_bytes());
-        buf[rec + 4..rec + 8].copy_from_slice(&checksum.to_be_bytes());
+        buf[rec + 4..rec + 8].copy_from_slice(&0u32.to_be_bytes());
         buf[rec + 8..rec + 12].copy_from_slice(&offsets[i].to_be_bytes());
         buf[rec + 12..rec + 16].copy_from_slice(&(bytes.len() as u32).to_be_bytes());
-    }
-
-    // head.checkSumAdjustment = 0xB1B0AFBA - checksum(entire file).
-    if let Some(off) = head_offset {
-        if off + 12 <= buf.len() {
-            let file_checksum = sfnt_checksum(&buf);
-            let adjustment = 0xB1B0_AFBAu32.wrapping_sub(file_checksum);
-            buf[off + 8..off + 12].copy_from_slice(&adjustment.to_be_bytes());
-        }
     }
 
     buf
@@ -355,7 +350,11 @@ fn assemble_sfnt(mut tables: Vec<(u32, Vec<u8>)>) -> Vec<u8> {
 
 /// OpenType table checksum: sum of the data as big-endian u32 words, with the
 /// final partial word zero-padded. Wraps on overflow.
-#[cfg(any(target_os = "macos", target_os = "ios", target_os = "tvos", test))]
+///
+/// `assemble_sfnt` no longer computes checksums (see the note there — the sums
+/// are unverified by our parser and cost ~100ms on Apple CJK super-fonts), so
+/// this now exists only to unit-test the checksum algorithm itself.
+#[cfg(test)]
 fn sfnt_checksum(data: &[u8]) -> u32 {
     let mut sum: u32 = 0;
     let mut i = 0;
@@ -401,7 +400,7 @@ mod tests {
             (u32::from_be_bytes(*b"glyf"), vec![0xAA; 7]),
             (head_tag, {
                 let mut h = vec![0u8; 54];
-                // put junk in checkSumAdjustment to prove it gets rewritten
+                // put junk in checkSumAdjustment to prove it gets zeroed
                 h[8..12].copy_from_slice(&0xDEAD_BEEFu32.to_be_bytes());
                 h
             }),
@@ -414,21 +413,31 @@ mod tests {
         let num_tables = u16::from_be_bytes([buf[4], buf[5]]);
         assert_eq!(num_tables, 3);
 
-        // Directory tags must be ascending, offsets 4-byte aligned, and within bounds.
+        // Directory tags must be ascending, offsets 4-byte aligned, and within
+        // bounds. Per-record checkSum is intentionally left 0 (unverified by
+        // our parser — see `assemble_sfnt`).
         let mut prev_tag = 0u32;
+        let mut head_off = None;
         for i in 0..num_tables as usize {
             let rec = 12 + i * 16;
             let tag = u32::from_be_bytes([buf[rec], buf[rec + 1], buf[rec + 2], buf[rec + 3]]);
+            let checksum =
+                u32::from_be_bytes([buf[rec + 4], buf[rec + 5], buf[rec + 6], buf[rec + 7]]);
             let off = u32::from_be_bytes([buf[rec + 8], buf[rec + 9], buf[rec + 10], buf[rec + 11]]);
             let len = u32::from_be_bytes([buf[rec + 12], buf[rec + 13], buf[rec + 14], buf[rec + 15]]);
             assert!(tag > prev_tag, "tags must be strictly ascending");
             prev_tag = tag;
+            assert_eq!(checksum, 0, "per-record checkSum must be left zero");
             assert_eq!(off % 4, 0, "table offset must be 4-byte aligned");
             assert!(off as usize + len as usize <= buf.len());
+            if tag == head_tag {
+                head_off = Some(off as usize);
+            }
         }
 
-        // Whole-file checksum must satisfy the OpenType invariant once
-        // checkSumAdjustment is written.
-        assert_eq!(sfnt_checksum(&buf), 0xB1B0_AFBA);
+        // head.checkSumAdjustment is left zero (a spec-permitted value); the junk
+        // seeded above must have been overwritten with zeros.
+        let off = head_off.expect("head table present");
+        assert_eq!(&buf[off + 8..off + 12], &0u32.to_be_bytes());
     }
 }
