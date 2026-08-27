@@ -40,7 +40,7 @@ use {
         permission::Permission,
         shared_framebuf::PollTimers,
         texture::{Texture, TextureFormat},
-        thread::SignalToUI,
+        thread::{SignalToUI, ToUIReceiver},
         window::{CxWindowPool, MacosWindowConfig, WindowId},
         PlaybackPrepared,
     },
@@ -553,6 +553,16 @@ impl Cx {
         }));
 
         cx.borrow_mut().call_event_handler(&Event::Startup);
+        // Kick off the async CJK font pre-warm before the first paint, so the
+        // background CoreText resolve races ahead of the first draw that might
+        // need CJK glyphs (see `prewarm_cjk_fonts`).
+        {
+            let mut cx = cx.borrow_mut();
+            if !cx.os.did_prewarm_fonts {
+                cx.os.did_prewarm_fonts = true;
+                cx.prewarm_cjk_fonts();
+            }
+        }
         cx.borrow_mut().redraw_all();
         // Start timer if there's initial work after startup
         if cx.borrow().need_redrawing() {
@@ -1005,6 +1015,7 @@ impl Cx {
                         self.handle_termination_signal();
                         self.handle_media_signals();
                         self.handle_script_signals();
+                        self.apply_prewarmed_cjk_fonts();
                         self.call_event_handler(&Event::Signal);
                         needs_timer = true;
                     }
@@ -2425,6 +2436,70 @@ mod tests {
     // used the old Vec API and never compiled; removed.
 }
 
+impl Cx {
+    /// Kick off the one-time startup pre-warm of common CJK system fonts.
+    ///
+    /// The first time a widget draws CJK text, `resolve_system_font` asks
+    /// CoreText for a font covering that script and reassembles its sfnt in
+    /// memory. For Apple's `hvgl`-based CJK super-fonts (PingFang, ~54MB) that
+    /// resolve+reassemble is the dominant term in the first-click stall
+    /// (~12ms even after the checksum-skip optimization). Because the result
+    /// is cached in the global `script_data.system_font_bytes` map keyed by
+    /// the full query, we can pay that cost off the main thread at startup and
+    /// turn the first real draw into a warm HashMap hit.
+    ///
+    /// `Cx`/`Fonts` are `!Send`, so the background thread does only the
+    /// `Cx`-free CoreText work (`apple_system_fonts::load_system_font`) and
+    /// hands the raw `Vec<u8>` back over `prewarm_font_receiver`. The queries
+    /// MUST match the draw path byte-for-byte (see
+    /// `draw_text.rs::ensure_fallback_for_scripts`): role `Ui`, weight 400,
+    /// not italic, empty lang, and the same per-script sample char.
+    fn prewarm_cjk_fonts(&mut self) {
+        use crate::cx_api::{SystemFontQuery, SystemFontRole};
+        // Han/Hangul/Hiragana/Katakana — the common CJK scripts, with the same
+        // sample chars `script_sample_char` uses. Han ('中') is the expensive
+        // one (PingFang); the kana/Hangul resolves are cheap but free to warm.
+        let samples = ['中', '가', 'あ', 'ア'];
+        let sender = self.os.prewarm_font_receiver.sender();
+        self.spawn_thread(move || {
+            for sample in samples {
+                let query = SystemFontQuery {
+                    role: SystemFontRole::Ui,
+                    weight: 400,
+                    italic: false,
+                    lang: String::new(),
+                    sample: sample.to_string(),
+                };
+                let bytes = crate::os::apple::apple_system_fonts::load_system_font(&query);
+                // A closed receiver just means the app is shutting down; stop.
+                if sender.send((query, bytes)).is_err() {
+                    break;
+                }
+            }
+        });
+    }
+
+    /// Drain any pre-warmed CJK font results the background thread produced and
+    /// insert them into the global system-font cache, mirroring what
+    /// `os_load_system_font` + `resolve_system_font` would have done on the
+    /// main thread. Idempotent: if the first real draw already resolved a query
+    /// itself, re-inserting the same bytes is harmless (identical key/value).
+    fn apply_prewarmed_cjk_fonts(&mut self) {
+        while let Ok((query, bytes)) = self.os.prewarm_font_receiver.try_recv() {
+            let result = bytes.map(|bytes| {
+                std::rc::Rc::new(crate::cx_api::SystemFontResult {
+                    bytes: crate::shared_bytes::SharedBytes::from_owned(std::rc::Rc::new(bytes)),
+                    index: 0,
+                })
+            });
+            self.script_data
+                .system_font_bytes
+                .borrow_mut()
+                .insert(query, result);
+        }
+    }
+}
+
 impl CxOsApi for Cx {
     fn pre_start() -> bool {
         init_apple_classes_global();
@@ -2566,6 +2641,18 @@ pub struct CxOs {
     /// Set true after the one-time startup shader pre-warm has run, so it fires
     /// exactly once (on the first draw) instead of every frame.
     pub(crate) did_prewarm_shaders: bool,
+    /// Set true after the one-time startup CJK font pre-warm has been kicked
+    /// off, so the background thread is spawned exactly once (on the first
+    /// draw) instead of every frame. See `prewarm_font_receiver`.
+    pub(crate) did_prewarm_fonts: bool,
+    /// Results from the startup CJK font pre-warm. A background thread resolves
+    /// the (expensive, CoreText-bound) system-font bytes for the common CJK
+    /// scripts and hands the raw bytes back here — `Cx`/`Fonts` are `!Send`, so
+    /// the thread must not touch them. The main thread drains this on
+    /// `Event::Signal` and populates `Cx::script_data.system_font_bytes` so the
+    /// first CJK draw is a warm cache hit instead of a ~12ms stall.
+    pub(crate) prewarm_font_receiver:
+        ToUIReceiver<(crate::cx_api::SystemFontQuery, Option<Vec<u8>>)>,
 }
 
 /// Completes the handshake with a development runner, if one launched us.
