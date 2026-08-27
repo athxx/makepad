@@ -904,7 +904,12 @@ impl Cx {
                 }
                 if self.need_redrawing() {
                     self.call_draw_event(time_now);
-                    self.mtl_compile_shaders(&metal_cx);
+                    if !self.os.did_prewarm_shaders {
+                        self.os.did_prewarm_shaders = true;
+                        self.mtl_prewarm_shaders(&metal_cx);
+                    } else {
+                        self.mtl_compile_shaders(&metal_cx);
+                    }
                     // The draw just pushed ShowTextIME with the live caret; drain it
                     // now so set_ime_position re-parks the bridge view this frame
                     // instead of stranding the op until a later callback (which
@@ -1876,6 +1881,8 @@ pub struct CxOs {
     pub(crate) native_camera_previews: HashMap<LiveId, IosNativeCameraPreview>,
     pub(crate) system_browsers: HashMap<LiveId, IosSystemBrowser>,
     pub(crate) internal_drag_items: Option<Arc<Vec<DragItem>>>,
+    /// Set true after the one-time startup shader pre-warm has run (see macOS).
+    pub(crate) did_prewarm_shaders: bool,
 }
 
 pub struct PermissionResultChannel {

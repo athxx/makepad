@@ -170,7 +170,12 @@ impl Cx {
                 }
                 if self.need_redrawing() {
                     self.call_draw_event(time_now);
-                    self.mtl_compile_shaders(&metal_cx);
+                    if !self.os.did_prewarm_shaders {
+                        self.os.did_prewarm_shaders = true;
+                        self.mtl_prewarm_shaders(&metal_cx);
+                    } else {
+                        self.mtl_compile_shaders(&metal_cx);
+                    }
                 }
                 // ok here we send out to all our childprocesses
                 self.handle_repaint(metal_cx);
@@ -337,4 +342,6 @@ pub struct CxOs {
     pub(crate) vertex_buffer_bytes_uploaded: u64,
     pub(crate) texture_bytes_uploaded: u64,
     pub(crate) apple_game_input: Option<crate::os::apple::apple_game_input::AppleGameInput>,
+    /// Set true after the one-time startup shader pre-warm has run (see macOS).
+    pub(crate) did_prewarm_shaders: bool,
 }

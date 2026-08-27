@@ -1531,6 +1531,19 @@ impl Cx {
         }
     }
 
+    /// Compile every registered draw-shader that isn't compiled yet, up front.
+    /// Called once at startup so the first user interaction doesn't pay the
+    /// synchronous shader-compile cost on the main thread. Idempotent: shaders
+    /// that already have an os_shader_id are skipped by the compile_set insert.
+    pub(crate) fn mtl_prewarm_shaders(&mut self, metal_cx: &MetalCx) {
+        for id in 0..self.draw_shaders.shaders.len() {
+            if self.draw_shaders.shaders[id].os_shader_id.is_none() {
+                self.draw_shaders.compile_set.insert(id);
+            }
+        }
+        self.mtl_compile_shaders(metal_cx);
+    }
+
     #[cfg(target_os = "macos")]
     pub fn share_texture_for_presentable_image(&mut self, texture: &Texture) -> u32 {
         let cxtexture = &mut self.textures[texture.texture_id()];

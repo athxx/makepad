@@ -1351,7 +1351,12 @@ impl Cx {
                 let needs_redrawing = self.need_redrawing();
                 if needs_redrawing {
                     self.call_draw_event(time_now);
-                    self.mtl_compile_shaders(&metal_cx);
+                    if !self.os.did_prewarm_shaders {
+                        self.os.did_prewarm_shaders = true;
+                        self.mtl_prewarm_shaders(&metal_cx);
+                    } else {
+                        self.mtl_compile_shaders(&metal_cx);
+                    }
                 }
                 let has_dirty_passes = self.any_passes_dirty();
                 // Start timer if we have work
@@ -2558,6 +2563,9 @@ pub struct CxOs {
     pub(crate) native_camera_previews: HashMap<LiveId, MacosNativeCameraPreview>,
     pub(crate) system_browsers: HashMap<LiveId, MacosSystemBrowser>,
     pub(crate) internal_drag_items: Option<Arc<Vec<DragItem>>>,
+    /// Set true after the one-time startup shader pre-warm has run, so it fires
+    /// exactly once (on the first draw) instead of every frame.
+    pub(crate) did_prewarm_shaders: bool,
 }
 
 /// Completes the handshake with a development runner, if one launched us.
