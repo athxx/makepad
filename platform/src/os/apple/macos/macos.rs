@@ -2415,35 +2415,9 @@ mod tests {
         }
     }
 
-    #[test]
-    fn defer_platform_op_breaks_when_requeued_op_is_alone() {
-        let window_id = WindowId(0, 0);
-        let mut platform_ops = Vec::new();
-
-        assert!(!defer_platform_op(
-            &mut platform_ops,
-            CxOsOp::SetTopmost(window_id, true),
-        ));
-        assert_eq!(platform_ops, vec![CxOsOp::SetTopmost(window_id, true)]);
-    }
-
-    #[test]
-    fn defer_platform_op_continues_when_other_ops_are_pending() {
-        let window_id = WindowId(0, 0);
-        let mut platform_ops = vec![CxOsOp::CreateWindow(window_id)];
-
-        assert!(defer_platform_op(
-            &mut platform_ops,
-            CxOsOp::SetTopmost(window_id, true),
-        ));
-        assert_eq!(
-            platform_ops,
-            vec![
-                CxOsOp::SetTopmost(window_id, true),
-                CxOsOp::CreateWindow(window_id)
-            ]
-        );
-    }
+    // NOTE: defer_platform_op tests live in cx_api.rs (the canonical location,
+    // testing the current VecDeque-based signature). Earlier stale copies here
+    // used the old Vec API and never compiled; removed.
 }
 
 impl CxOsApi for Cx {

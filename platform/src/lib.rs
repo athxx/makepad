@@ -32,6 +32,7 @@ mod draw_matrix;
 mod draw_pass;
 mod draw_shader;
 mod draw_vars;
+pub mod shader_compile;
 
 #[cfg(any(target_os = "macos", target_os = "windows", target_os = "linux"))]
 mod app_icon;
