@@ -26,7 +26,7 @@ use {
         makepad_zune_core::{bit_depth::BitDepth, colorspace::ColorSpace, options::EncoderOptions},
         PngEncoder,
     },
-    std::cell::RefCell,
+    std::cell::{Cell, RefCell},
     std::collections::{HashMap, VecDeque},
     std::fmt::Write,
     std::sync::atomic::{AtomicU64, AtomicUsize, Ordering},
@@ -1541,7 +1541,24 @@ impl Cx {
                 self.draw_shaders.compile_set.insert(id);
             }
         }
+        let bench = std::env::var_os("MAKEPAD_SHADER_BENCH").is_some();
+        let t0 = std::time::Instant::now();
+        let count = self.draw_shaders.compile_set.len();
         self.mtl_compile_shaders(metal_cx);
+        // Debounced write: only touches disk if a MISS grew the archive during
+        // this prewarm (see metal_serialize_binary_archive). After prewarm, new
+        // shaders compiled during a session also mark it dirty and get flushed
+        // by the same call on the next prewarm/serialize opportunity.
+        metal_cx.metal_serialize_binary_archive();
+        if bench {
+            crate::log!(
+                "MPSHADERBENCH metal prewarm shaders={} total={:.2}ms archive={} dirty_after={}",
+                count,
+                t0.elapsed().as_secs_f64() * 1000.0,
+                if metal_cx.binary_archive.is_null() { 0 } else { 1 },
+                metal_cx.binary_archive_dirty.get()
+            );
+        }
     }
 
     #[cfg(target_os = "macos")]
@@ -1649,6 +1666,88 @@ impl DrawPassMode {
     }
 }
 
+// Bump when the MSL generation, pipeline-descriptor setup, entry-point names, or
+// the meaning of the archive filename change, so an archive written by an older
+// engine is not loaded into a mismatched pipeline layout. This is only one of
+// three invalidation layers: the filename also carries the device `registryID`
+// (different GPU => different file), and a load/serialize failure is treated as
+// a miss and the archive is rebuilt from scratch (see `metal_load_binary_archive`).
+const METAL_CACHE_KEY_VERSION: u8 = 1;
+
+/// Load-or-create the app-wide `MTLBinaryArchive` from disk. Returns
+/// `(archive, url)`, both `nil` if no cache dir is resolvable or the OS/driver
+/// rejected the on-disk blob — the caller then runs source-compile only.
+///
+/// A single archive holds every draw-shader pipeline (it is a multi-pipeline
+/// container). The filename carries `METAL_CACHE_KEY_VERSION` and the device
+/// `registryID` so a different GPU or an engine change starts a fresh archive
+/// instead of feeding incompatible bytes to `newRenderPipelineStateWithDescriptor:`.
+///
+/// Everything here touches `device` and must stay on the main thread.
+fn metal_load_binary_archive(device: ObjcId) -> (ObjcId, ObjcId) {
+    let Some(dir) = crate::shader_compile::shader_cache_dir("metal_binary_archive") else {
+        return (nil, nil);
+    };
+    let registry_id: u64 = unsafe { msg_send![device, registryID] };
+    let file = dir.join(format!(
+        "metal_v{}_dev{:016x}.binarchive",
+        METAL_CACHE_KEY_VERSION, registry_id
+    ));
+    let Some(path_str) = file.to_str() else {
+        return (nil, nil);
+    };
+
+    unsafe {
+        let url: ObjcId = msg_send![class!(NSURL), fileURLWithPath: str_to_nsstring(path_str)];
+        // Retain the URL so it outlives this frame — MetalCx holds it for the
+        // whole process to `serializeToURL:` the updated archive on new misses.
+        let url: ObjcId = msg_send![url, retain];
+
+        let descriptor: ObjcId = msg_send![class!(MTLBinaryArchiveDescriptor), new];
+        // Point the descriptor at the existing file only if it is there. A
+        // missing file (cold launch) means an empty archive that we populate as
+        // pipelines are built. A present-but-incompatible file makes
+        // `newBinaryArchiveWithDescriptor:` fail below, which we treat as a miss.
+        if file.exists() {
+            let _: () = msg_send![descriptor, setUrl: url];
+        }
+
+        let mut error: ObjcId = nil;
+        let archive: ObjcId = msg_send![
+            device,
+            newBinaryArchiveWithDescriptor: descriptor
+            error: &mut error
+        ];
+        let _: () = msg_send![descriptor, release];
+
+        if archive.is_null() {
+            // Incompatible/corrupt on-disk blob: start clean with an empty
+            // archive (no url on the descriptor) rather than giving up caching.
+            if std::env::var_os("MAKEPAD_SHADER_BENCH").is_some() {
+                let description: ObjcId = msg_send![error, localizedDescription];
+                crate::log!(
+                    "MPSHADERBENCH metal archive load FAILED, starting fresh: {}",
+                    nsstring_to_string(description)
+                );
+            }
+            let descriptor: ObjcId = msg_send![class!(MTLBinaryArchiveDescriptor), new];
+            let mut error2: ObjcId = nil;
+            let fresh: ObjcId = msg_send![
+                device,
+                newBinaryArchiveWithDescriptor: descriptor
+                error: &mut error2
+            ];
+            let _: () = msg_send![descriptor, release];
+            if fresh.is_null() {
+                let _: () = msg_send![url, release];
+                return (nil, nil);
+            }
+            return (fresh, url);
+        }
+        (archive, url)
+    }
+}
+
 pub struct MetalCx {
     pub device: ObjcId,
     command_queue: ObjcId,
@@ -1692,6 +1791,22 @@ pub struct MetalCx {
     /// Once-per-second cadence for the opt-in staging/command-buffer counters.
     #[allow(dead_code)] // read by the macos present gate
     memory_trace_at: Instant,
+    /// Persistent on-disk pipeline cache. `MTLBinaryArchive` is a multi-pipeline
+    /// container: on a warm launch `newRenderPipelineStateWithDescriptor:` finds
+    /// the pipeline already compiled inside it and deserializes it cheaply,
+    /// instead of paying the source-compile + pipeline-build cost that shows up
+    /// as first-frame jank. `nil` when the archive could not be created (no
+    /// cache dir, or the OS/driver rejected the on-disk blob) — the source
+    /// path in `CxOsDrawShader::new` is always the fallback. See
+    /// `metal_load_binary_archive`.
+    binary_archive: ObjcId,
+    /// `file://` NSURL of the archive on disk, retained so `serializeToURL:` can
+    /// write the updated archive back. `nil` iff `binary_archive` is `nil`.
+    binary_archive_url: ObjcId,
+    /// Set true whenever a MISS added a new pipeline to `binary_archive`, so we
+    /// serialize at most once (debounced) instead of after every shader — a
+    /// full-archive write per shader during prewarm would be O(n²) disk I/O.
+    binary_archive_dirty: Cell<bool>,
 }
 
 /// Highest `MetalCx::cb_seq` whose command buffer has COMPLETED. One
@@ -2325,6 +2440,7 @@ impl MetalCx {
             ];
             tex
         };
+        let (binary_archive, binary_archive_url) = metal_load_binary_archive(device);
         MetalCx {
             command_queue: unsafe { msg_send![device, newCommandQueue] },
             device,
@@ -2338,6 +2454,40 @@ impl MetalCx {
             repaint_tail_seqs: VecDeque::new(),
             backpressure_skips: 0,
             memory_trace_at: Instant::now(),
+            binary_archive,
+            binary_archive_url,
+            binary_archive_dirty: Cell::new(false),
+        }
+    }
+
+    /// Write the archive back to disk, but only if a MISS added a pipeline since
+    /// the last serialize (debounced via `binary_archive_dirty`). Serializing the
+    /// whole archive after every shader would be O(n²) disk I/O during prewarm;
+    /// callers instead invoke this once at the end of prewarm and thereafter only
+    /// when a new pipeline was compiled. Touches `device`/disk — main thread only.
+    pub(crate) fn metal_serialize_binary_archive(&self) {
+        if self.binary_archive.is_null()
+            || self.binary_archive_url.is_null()
+            || !self.binary_archive_dirty.get()
+        {
+            return;
+        }
+        unsafe {
+            let mut error: ObjcId = nil;
+            let ok: bool = msg_send![
+                self.binary_archive,
+                serializeToURL: self.binary_archive_url
+                error: &mut error
+            ];
+            if ok {
+                self.binary_archive_dirty.set(false);
+            } else if std::env::var_os("MAKEPAD_SHADER_BENCH").is_some() {
+                let description: ObjcId = msg_send![error, localizedDescription];
+                crate::log!(
+                    "MPSHADERBENCH metal archive serialize FAILED: {}",
+                    nsstring_to_string(description)
+                );
+            }
         }
     }
 }
@@ -2349,6 +2499,12 @@ impl Drop for MetalCx {
             let () = unsafe { msg_send![buffer, release] };
         }
         unsafe {
+            if !self.binary_archive.is_null() {
+                let () = msg_send![self.binary_archive, release];
+            }
+            if !self.binary_archive_url.is_null() {
+                let () = msg_send![self.binary_archive_url, release];
+            }
             let () = msg_send![self.fallback_texture, release];
             let () = msg_send![self.command_queue, release];
             let () = msg_send![self.device, release];
@@ -2684,20 +2840,62 @@ impl CxOsDrawShader {
 
             let () = msg_send![descriptor.as_id(), setDepthAttachmentPixelFormat: MTLPixelFormat::Depth32Float];
 
+            // Reference the on-disk archive so a warm launch deserializes this
+            // pipeline out of it (cheap) instead of recompiling. On a cold
+            // launch the archive is empty and this is a no-op; we add the built
+            // pipeline to it below. `nil` archive => no caching, source path only.
+            if !metal_cx.binary_archive.is_null() {
+                let archives: ObjcId =
+                    msg_send![class!(NSArray), arrayWithObject: metal_cx.binary_archive];
+                let () = msg_send![descriptor.as_id(), setBinaryArchives: archives];
+            }
+
             let mut error: ObjcId = nil;
             msg_send![
                 metal_cx.device,
-                newRenderPipelineStateWithDescriptor: descriptor
+                newRenderPipelineStateWithDescriptor: descriptor.as_id()
                 error: &mut error
             ]
         }).unwrap());
 
+        // Add the freshly-built pipeline to the archive so the NEXT launch can
+        // deserialize it. On a warm hit this is a cheap no-op (already present);
+        // on a miss it grows the archive and marks it dirty for a debounced
+        // serialize at the end of prewarm. Must stay on the main thread (touches
+        // device). `addRenderPipelineFunctions...` compiles/records into the
+        // archive without producing a pipeline object.
+        if !metal_cx.binary_archive.is_null() {
+            unsafe {
+                let mut error: ObjcId = nil;
+                let ok: bool = msg_send![
+                    metal_cx.binary_archive,
+                    addRenderPipelineFunctionsWithDescriptor: descriptor.as_id()
+                    error: &mut error
+                ];
+                if ok {
+                    metal_cx.binary_archive_dirty.set(true);
+                } else if std::env::var_os("MAKEPAD_SHADER_BENCH").is_some() {
+                    let description: ObjcId = msg_send![error, localizedDescription];
+                    crate::log!(
+                        "MPSHADERBENCH metal archive add FAILED: {}",
+                        nsstring_to_string(description)
+                    );
+                }
+            }
+        }
+
         // Opt-in: shader compile timing is only interesting when someone is
         // measuring it, and every boot compiles dozens of shaders.
         if std::env::var("MAKEPAD_SHADER_BENCH").is_ok() {
-            crate::log!("MPSHADERBENCH src={} bytes lib={:.2}ms pipeline={:.2}ms total={:.2}ms",
+            // `archive` = whether an on-disk archive was in play. A warm launch
+            // has archive=1 and a pipeline ms that collapses toward zero (the
+            // pipeline was deserialized, not compiled); a cold launch has
+            // archive=1 with high pipeline ms (compiled, then added to the
+            // archive). archive=0 means caching was unavailable this run.
+            crate::log!("MPSHADERBENCH src={} bytes lib={:.2}ms pipeline={:.2}ms total={:.2}ms archive={}",
                 _mp_src_len, _mp_lib_ms, _mp_t1.elapsed().as_secs_f64()*1000.0,
-                _mp_t0.elapsed().as_secs_f64()*1000.0);
+                _mp_t0.elapsed().as_secs_f64()*1000.0,
+                if metal_cx.binary_archive.is_null() { 0 } else { 1 });
         }
         crate::startup_acc("metal newLibraryWithSource", _mp_lib_ms);
         crate::startup_acc(

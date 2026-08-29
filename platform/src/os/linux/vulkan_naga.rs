@@ -3,8 +3,44 @@ use {
         shader::ShaderOutput, shader_wgsl::compile_draw_shader_wgsl_source, value::ScriptObject,
         vm::ScriptVm,
     },
+    crate::shader_compile::{shader_cache_dir, shader_cache_key},
     std::fmt::Write,
 };
+
+// Bump when the naga version, WGSL generation, or the on-disk SPIR-V encoding
+// changes, so stale `.spv` blobs from an older engine are invalidated instead
+// of being fed to the driver as mismatched bytes. SPIR-V is driver-independent,
+// so unlike Metal/Vulkan-pipeline blobs this is the ONLY invalidation lever —
+// no device fingerprint is needed in the key.
+const VULKAN_CACHE_KEY_VERSION: u8 = 1;
+
+const SPIRV_MAGIC: u32 = 0x0723_0203;
+
+// A SPIR-V blob is a stream of little-endian u32 words beginning with the magic
+// number. A file that fails either check is treated as a cache miss (truncated
+// write, wrong-endian, or foreign format) and recompiled — never handed to the
+// driver.
+fn spirv_bytes_to_words(bytes: &[u8]) -> Option<Vec<u32>> {
+    if bytes.len() < 4 || bytes.len() % 4 != 0 {
+        return None;
+    }
+    let words: Vec<u32> = bytes
+        .chunks_exact(4)
+        .map(|c| u32::from_le_bytes([c[0], c[1], c[2], c[3]]))
+        .collect();
+    if *words.first()? != SPIRV_MAGIC {
+        return None;
+    }
+    Some(words)
+}
+
+fn spirv_words_to_bytes(words: &[u32]) -> Vec<u8> {
+    let mut out = Vec::with_capacity(words.len() * 4);
+    for w in words {
+        out.extend_from_slice(&w.to_le_bytes());
+    }
+    out
+}
 
 #[derive(Clone)]
 pub struct CxVulkanShaderBinary {
@@ -116,6 +152,84 @@ fn compile_wgsl_to_spirv(wgsl: &str) -> Result<(Option<Vec<u32>>, Option<Vec<u32
     Ok((vertex_spirv, fragment_spirv))
 }
 
+// Read-or-create around the naga compile: on a warm launch the SPIR-V is read
+// straight off disk and naga is never invoked; on a cold launch (or a stale/
+// corrupt cache entry) it compiles and writes both stages back. Mirrors the
+// D3D11 `get_or_compile_shader_bytes` pattern (os/windows/d3d11.rs), but keyed
+// off the shared `shader_compile` helpers so all backends share one cache root.
+//
+// Under MAKEPAD_SHADER_BENCH it prints a HIT/MISS line per shader with the
+// cache key and naga-compile ms, so a cold-then-warm relaunch shows the
+// timing collapse that is the acceptance test for this change.
+fn compile_wgsl_to_spirv_cached(
+    wgsl: &str,
+) -> Result<(Option<Vec<u32>>, Option<Vec<u32>>), String> {
+    let bench = std::env::var_os("MAKEPAD_SHADER_BENCH").is_some();
+    let key = shader_cache_key(wgsl, VULKAN_CACHE_KEY_VERSION);
+    let dir = shader_cache_dir("vulkan_spirv");
+
+    // Fast path: both stages present and valid on disk => HIT, skip naga.
+    if let Some(dir) = &dir {
+        let vs_path = dir.join(format!("{:016x}_vs.spv", key));
+        let fs_path = dir.join(format!("{:016x}_fs.spv", key));
+        // A shader can legitimately have only one stage; a stage is "cached"
+        // when its file is absent-by-design or present-and-valid. We record
+        // presence so a missing-because-none-exists stage still counts as a
+        // hit, while a missing-because-not-yet-written stage forces a miss.
+        let vs = std::fs::read(&vs_path).ok().and_then(|b| spirv_bytes_to_words(&b));
+        let fs = std::fs::read(&fs_path).ok().and_then(|b| spirv_bytes_to_words(&b));
+        // Only treat as a hit when at least one stage read back cleanly and no
+        // present-but-corrupt file was seen. If either file exists but failed
+        // validation, fall through to recompile (which overwrites it).
+        let vs_ok = !vs_path.exists() || vs.is_some();
+        let fs_ok = !fs_path.exists() || fs.is_some();
+        let any_present = vs.is_some() || fs.is_some();
+        if any_present && vs_ok && fs_ok {
+            if bench {
+                crate::log!(
+                    "MPSHADERBENCH vulkan HIT key={:016x} vs={} fs={}",
+                    key,
+                    vs.is_some(),
+                    fs.is_some()
+                );
+            }
+            return Ok((vs, fs));
+        }
+    }
+
+    // Miss: compile with naga, then write both stages back to disk.
+    let t0 = std::time::Instant::now();
+    let (vertex_spirv, fragment_spirv) = compile_wgsl_to_spirv(wgsl)?;
+    let compile_ms = t0.elapsed().as_secs_f64() * 1000.0;
+
+    if let Some(dir) = &dir {
+        if let Some(words) = &vertex_spirv {
+            let _ = std::fs::write(
+                dir.join(format!("{:016x}_vs.spv", key)),
+                spirv_words_to_bytes(words),
+            );
+        }
+        if let Some(words) = &fragment_spirv {
+            let _ = std::fs::write(
+                dir.join(format!("{:016x}_fs.spv", key)),
+                spirv_words_to_bytes(words),
+            );
+        }
+    }
+
+    if bench {
+        crate::log!(
+            "MPSHADERBENCH vulkan MISS key={:016x} naga={:.2}ms vs={} fs={}",
+            key,
+            compile_ms,
+            vertex_spirv.is_some(),
+            fragment_spirv.is_some()
+        );
+    }
+
+    Ok((vertex_spirv, fragment_spirv))
+}
+
 pub(crate) fn compile_draw_shader_wgsl_to_spirv(
     vm: &mut ScriptVm,
     io_self: ScriptObject,
@@ -129,7 +243,7 @@ pub(crate) fn compile_draw_shader_wgsl_to_spirv(
         crate::log!("---- Vulkan WGSL ({variant}) ----\n{}", wgsl_source.wgsl);
     }
 
-    let (vertex_spirv, fragment_spirv) = compile_wgsl_to_spirv(&wgsl_source.wgsl)
+    let (vertex_spirv, fragment_spirv) = compile_wgsl_to_spirv_cached(&wgsl_source.wgsl)
         .map_err(|err| format!("{err}\nSet MAKEPAD_DUMP_VULKAN_WGSL=1 to dump generated WGSL."))?;
 
     Ok(CxVulkanShaderBinary {
