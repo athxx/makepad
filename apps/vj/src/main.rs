@@ -11522,7 +11522,7 @@ p2 {}
     /// cleared when the manifest lands or fails.
     fn pump_dream_thumbs(&mut self) {
         let wanted: Vec<AssetRevisionId> = self
-            .gen
+            .generate
             .jobs()
             .filter_map(|job| job.input_revision())
             .filter(|rev| {

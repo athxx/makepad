@@ -20,19 +20,19 @@ unsafe extern "C" {
 }
 
 #[link(name = "Metal", kind = "framework")]
-extern "C" {
+unsafe extern "C" {
     fn MTLCreateSystemDefaultDevice() -> ObjcId;
 }
 
 #[link(name = "IOSurface", kind = "framework")]
-extern "C" {
+unsafe extern "C" {
     fn IOSurfaceGetWidth(surface: *mut c_void) -> usize;
     fn IOSurfaceGetHeight(surface: *mut c_void) -> usize;
     fn IOSurfaceGetPixelFormat(surface: *mut c_void) -> u32;
 }
 
 #[link(name = "CoreFoundation", kind = "framework")]
-extern "C" {
+unsafe extern "C" {
     fn CFRetain(cf: *const c_void) -> *const c_void;
     fn CFRelease(cf: *const c_void);
 }
@@ -1295,7 +1295,7 @@ fn profile_root_cache_path() -> Result<PathBuf> {
 
 /// True when `pid` is alive (signal 0 probe).
 unsafe fn libc_kill_probe(pid: i32) -> bool {
-    extern "C" {
+    unsafe extern "C" {
         fn kill(pid: i32, sig: i32) -> i32;
     }
     kill(pid, 0) == 0
@@ -1780,7 +1780,7 @@ pub fn initialize() -> Result<()> {
 pub fn prepare() -> Result<()> {
     ensure_cef_application_patch()?;
     external_pump()?;
-    env::set_var("MallocNanoZone", "0");
+    unsafe { env::set_var("MallocNanoZone", "0"); }
     Ok(())
 }
 
