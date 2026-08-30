@@ -104,7 +104,7 @@ impl PageFlip {
             }
             self.pages.get(&page_id).cloned()
         } else {
-            error!("Template not found: {page_id}. Did you add it to the <PageFlip> instance in `live_design!{{}}`?");
+            error!("Template not found: {page_id}. Did you add it to the <PageFlip> instance in `script_mod!{{}}`?");
             None
         }
     }

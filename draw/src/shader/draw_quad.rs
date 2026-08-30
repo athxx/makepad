@@ -185,63 +185,6 @@ impl DrawQuad {
 }
 
 /*
-live_design!{
-    use link::shaders::*;
-    pub DrawQuad = {{DrawQuad}} {
-        varying pos: vec2
-        varying world: vec4,
-        fn clip_and_transform_vertex(self, rect_pos:vec2, rect_size:vec2) -> vec4 {
-            let clipped: vec2 = clamp(
-                clamp(
-                    self.geom_pos * rect_size + rect_pos,
-                    self.draw_clip.xy,
-                    self.draw_clip.zw
-                )
-                + self.view_shift,
-                self.view_clip.xy,
-                self.view_clip.zw
-            );
-            //clipped = self.geom_pos * rect_size + rect_pos;
-            self.pos = (clipped - rect_pos) / rect_size
-            self.world = self.view_transform * vec4(
-                clipped.x,
-                clipped.y,
-                self.draw_depth + self.draw_zbias,
-                1.
-            );
-            // only pass the clipped position forward
-            return self.camera_projection * (self.camera_view * (self.world))
-        }
-
-        fn transform_vertex(self, rect_pos:vec2, rect_size:vec2) -> vec4 {
-            let clipped: vec2 = self.geom_pos * rect_size + rect_pos;
-
-            self.pos = (clipped - rect_pos) / rect_size
-            // only pass the clipped position forward
-            self.world = self.view_transform * vec4(
-                clipped.x,
-                clipped.y,
-                self.draw_depth + self.draw_zbias,
-                1.
-            );
-            return self.camera_projection * (self.camera_view * (self.world ))
-        }
-
-        fn vertex(self) -> vec4 {
-            return self.clip_and_transform_vertex(self.rect_pos, self.rect_size)
-        }
-
-        fn pixel(self)->vec4{
-            return #f00
-        }
-
-        fn fragment(self) -> vec4 {
-            return depth_clip(self.world, self.pixel(), self.depth_clip);
-        }
-    }
-}*/
-
-/*
 #[derive(Live, LiveRegister)]
 #[repr(C)]
 pub struct DrawQuad {

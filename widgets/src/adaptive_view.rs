@@ -32,7 +32,7 @@ script_mod! {
 ///
 /// ```ignore
 
-/// live_design! {
+/// script_mod! {
 ///     // ...
 ///     adaptive = <AdaptiveView> {
 ///         Desktop = <CustomView> {
