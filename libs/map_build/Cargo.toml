@@ -26,4 +26,4 @@ makepad-mbtile-reader = { path = "../mbtile_reader" }
 makepad-widgets = { path = "../../widgets", features = ["maps"], optional = true }
 osmpbf = "0.3.8"
 serde_json = "1.0"
-smallvec = { path = "../smallvec" }
+smallvec = { path = "../../vendor/smallvec" }
