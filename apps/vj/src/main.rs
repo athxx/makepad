@@ -148,7 +148,7 @@ use crate::fx_slot::{
 use crate::midi_learn::{LearnEvent, LearnWrapAction, MidiLearn, VjLearnWrap};
 use makepad_asset_widgets::{VideoAction, VideoView};
 use crate::pipelines::{PipeDone, PipeReq, Pipelines};
-use crate::generate::{GenCmd, GenModel, GenTag, ProfilesState};
+use crate::generate::{GenCmd, GenModel, ProfilesState};
 use crate::lanes::{LatestWins, AUDIO_LANE};
 use crate::media::{DecodeDone, DecodeJob, DecodePool, SlotPlayer};
 use crate::mixer::{
@@ -11440,18 +11440,20 @@ p2 {}
                         });
                     }
                     GenCmd::Enqueue { tag, namespace, kind, body } => {
-                        match up.catalog.submit(ClientRequest::EnqueueJob { namespace, kind, body }) {
-                            Ok(id) => {
-                                self.cat_reqs.insert(id, CatPurpose::JobEnqueue { tag });
-                            }
-                            Err(_) => {
-                                runtime_down = true;
-                                self.generate.enqueue_failed_at(
-                                    tag,
-                                    "connection lost — reconnecting, press Queue again".to_string(),
-                                    Some(now),
-                                );
-                            }
+                        if !self.pipelines.connected() {
+                            self.pipelines.connect(up.endpoints, up.token.clone());
+                        }
+                        if !self.pipelines.submit(PipeReq::EnqueueJob {
+                            tag,
+                            namespace,
+                            kind,
+                            body,
+                        }) {
+                            self.generate.enqueue_failed_at(
+                                tag,
+                                "run transport unavailable — press Queue again".to_string(),
+                                Some(now),
+                            );
                         }
                     }
                     GenCmd::PollStatus { job } => {
@@ -12949,20 +12951,6 @@ p2 {}
                             self.fx_slot_reloading[slot.index()] = false;
                             log!("fx slot {slot:?}: hot reload failed: {error}");
                         }
-                        CatPurpose::JobProfiles { .. } => {
-                            self.generate.profiles_failed(error.to_string());
-                        }
-                        CatPurpose::JobEnqueue { tag } => {
-                            self.generate.enqueue_failed_at(tag, error.to_string(), Some(now_ms()));
-                        }
-                        CatPurpose::JobStatus { job } => {
-                            self.generate.status_failed_at(
-                                job,
-                                error.to_string(),
-                                Some(now_ms()),
-                            );
-                        }
-                        CatPurpose::JobCancel { .. } => {}
                         CatPurpose::SideChannelPublish { asset } => {
                             // A store that will not take them (no write
                             // capability, an older server) is not an error
@@ -13310,25 +13298,6 @@ p2 {}
                         self.thumb_inflight.insert(revision);
                     }
                 }
-            }
-            (CatPurpose::JobProfiles { domain }, ClientOutput::JobProfiles(profiles)) => {
-                self.generate.profiles_arrived(domain, profiles);
-                self.sync_gen_profiles(cx);
-                // The flux list only exists once the image domain lands.
-                self.sync_gen_pickers(cx);
-            }
-            (CatPurpose::JobEnqueue { tag }, ClientOutput::JobQueued(job)) => {
-                let cmds = self.generate.queued_at(tag, job, Some(now_ms()));
-                self.run_gen_cmds(cmds);
-            }
-            (CatPurpose::JobStatus { .. }, ClientOutput::JobStatus(status)) => {
-                // Single-job rows only. A DREAM run is a pipeline: its
-                // record arrives through `pump_pipelines`, and nothing here
-                // advances a stage any more.
-                self.generate.status_arrived_at(&status, now_ms());
-            }
-            (CatPurpose::JobCancel { job }, ClientOutput::JobCancelled(count)) => {
-                self.generate.cancel_confirmed_at(job, count, Some(now_ms()));
             }
             (CatPurpose::SideChannelPublish { asset }, ClientOutput::SideChannels(outcome)) => {
                 match outcome {
